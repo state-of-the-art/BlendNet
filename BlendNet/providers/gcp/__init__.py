@@ -1,0 +1,656 @@
+'''Google Cloud Platform
+Provide API access to allocate required resources in GCP
+Dependencies: google cloud sdk installed and configured auth
+'''
+
+__all__ = [
+    'Manager',
+    'Agent',
+    'Instance',
+]
+
+METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
+METADATA_HEADER = ('Metadata-Flavor', 'Google')
+
+LOCATION = None # If the script is running in the cloud
+GOOGLE_CLOUD_SDK_ROOT = None
+GOOGLE_CLOUD_SDK_CREDS = None
+GOOGLE_CLOUD_SDK_CONFIGS = None
+
+def _requestMetadata(path):
+    import urllib.request
+    req = urllib.request.Request(METADATA_URL+path)
+    req.add_header(*METADATA_HEADER)
+    try:
+        while True:
+            with urllib.request.urlopen(req, timeout=2) as res:
+                if res.getcode() == 503:
+                    import time
+                    time.sleep(1)
+                    continue
+                return res.read().decode('utf-8')
+    except:
+        return None
+
+def checkLocation():
+    '''Returns True if it's the GCP environment'''
+    global LOCATION
+
+    if LOCATION != None:
+        return LOCATION
+
+    LOCATION = _requestMetadata('') != None
+    return LOCATION
+
+def setGoogleCloudSdk(path):
+    global GOOGLE_CLOUD_SDK_ROOT
+    import os.path
+    if os.path.isdir(path) and os.path.isdir('%s/platform' % path):
+        print('INFO: Found google cloud sdk: %s' % path)
+        GOOGLE_CLOUD_SDK_ROOT = path
+        return True
+
+    return False
+
+def findGoogleCloudSdk():
+    '''Will try to find the google cloud sdk home directory'''
+    import subprocess
+    result = subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        return
+    lines = result.stdout.decode('utf-8').split('\n')
+    for line in lines:
+        if not line.startswith('Installation Root: ['):
+            continue
+        path = line.strip()[:-1].lstrip('Installation Root: [')
+        if setGoogleCloudSdk(path):
+            return path
+
+def loadGoogleCloudSdk():
+    import sys
+    print('DEBUG: Loading gcloud paths')
+    sys.path.append('%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT)
+    sys.path.append('%s/platform/bq/third_party' % GOOGLE_CLOUD_SDK_ROOT)
+    sys.path.append('%s/lib' % GOOGLE_CLOUD_SDK_ROOT)
+
+    # Init credentials and properties
+    _getCreds()
+
+def checkDependencies():
+    return GOOGLE_CLOUD_SDK_ROOT != None
+
+def _getCreds():
+    if not GOOGLE_CLOUD_SDK_ROOT:
+        raise Exception("Unable to find the Google Cloud SDK - make sure it's installed, "
+                        "gcloud utility is in the PATH and configured properly")
+
+    global GOOGLE_CLOUD_SDK_CREDS
+    if not GOOGLE_CLOUD_SDK_CREDS:
+        from googlecloudsdk.core.credentials import store
+        store.DevShellCredentialProvider().Register()
+        store.GceCredentialProvider().Register()
+        GOOGLE_CLOUD_SDK_CREDS = store.LoadIfEnabled()
+    elif GOOGLE_CLOUD_SDK_CREDS.access_token_expired:
+        print('DEBUG: Updating credentials token')
+        from googlecloudsdk.core.credentials import store
+        GOOGLE_CLOUD_SDK_CREDS = store.LoadIfEnabled()
+
+    return GOOGLE_CLOUD_SDK_CREDS
+
+def _getConfigs():
+    global GOOGLE_CLOUD_SDK_CONFIGS
+    if not GOOGLE_CLOUD_SDK_CONFIGS:
+        from googlecloudsdk.core import properties
+        props = properties.VALUES
+        configs = {
+            'account': props.core.account.Get(),
+            'project': props.core.project.Get(),
+            'region': props.compute.region.Get(),
+            'zone': props.compute.zone.Get(),
+        }
+
+        if checkLocation():
+            # Get defaults from metadata if they are not set
+            if not configs['project']:
+                configs['project'] = _requestMetadata('project/project-id')
+            if not configs['zone']:
+                configs['zone'] = _requestMetadata('instance/zone').rsplit('/', 1)[1]
+            if not configs['region']:
+                configs['region'] = configs['zone'].rsplit('-', 1)[0]
+
+        GOOGLE_CLOUD_SDK_CONFIGS = configs
+
+    return GOOGLE_CLOUD_SDK_CONFIGS
+
+def _getCompute():
+    creds = _getCreds()
+    import googleapiclient.discovery
+    return googleapiclient.discovery.build('compute', 'v1', credentials=creds)
+
+def _getStorage():
+    creds = _getCreds()
+    import googleapiclient.discovery
+    return googleapiclient.discovery.build('storage', 'v1', credentials=creds)
+
+def getProviderInfo():
+    configs = {}
+    try:
+        compute, configs = _getCompute(), _getConfigs()
+        useful_quotas = [
+            'CPUS',
+            'CPUS_ALL_REGIONS',
+            'DISKS_TOTAL_GB',
+            'GLOBAL_INTERNAL_ADDRESSES',
+            'INSTANCES',
+            'IN_USE_ADDRESSES',
+            'PREEMPTIBLE_CPUS',
+        ]
+
+        # Get project quotas
+        resp = compute.projects().get(project=configs['project']).execute()
+        for q in resp['quotas']:
+            if q['metric'] in useful_quotas:
+                configs['Project quota: %s' % q['metric']] = '%.1f, usage: %.1f' % (q['limit'], q['usage'])
+
+        # Get region quotas
+        resp = compute.regions().get(project=configs['project'], region=configs['region']).execute()
+        for q in resp['quotas']:
+            if q['metric'] in useful_quotas:
+                configs['Region quota: %s' % q['metric']] = '%.1f, usage: %.1f' % (q['limit'], q['usage'])
+    except Exception as e:
+        configs['ERROR'] = 'Looks like access to the compute API is restricted ' \
+                           '- please check your permissions: %s' % e
+
+    return configs
+
+def getInstanceTypes():
+    try:
+        compute, configs = _getCompute(), _getConfigs()
+        resp = compute.machineTypes().list(project=configs['project'], zone=configs['zone']).execute()
+        return dict([ (d['name'], d['description']) for d in resp['items'] ])
+    except:
+        return {'ERROR': 'Looks like access to the compute API is restricted '
+                         '- please check your permissions'}
+    return []
+
+def _waitForOperation(compute, project, zone, operation):
+    '''Waiting for compute operation to finish...'''
+    import time
+    while True:
+        resp = compute.zoneOperations().get(project=project, zone=zone, operation=operation).execute()
+        if resp['status'] == 'DONE':
+            if 'error' in resp:
+                raise Exception(resp['error'])
+            return resp
+
+        time.sleep(1)
+
+def _getInstance(instance_name):
+    '''Get the instance information or return None'''
+    compute, configs = _getCompute(), _getConfigs()
+    try:
+        resp = compute.instances().get(project=configs['project'], zone=configs['zone'], instance=instance_name).execute()
+        return resp
+    except Exception as e:
+        return None
+
+def createInstanceManager(instance_type, session_id, name):
+    '''Creating a new instance for BlendNet Manager'''
+
+    compute, configs = _getCompute(), _getConfigs()
+
+    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], instance_type)
+    # TODO: add option to specify the image to use
+    #image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
+    image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
+
+    # TODO: make script overridable
+    # TODO: a way to use custom url's to download the deps
+    blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
+    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
+    # TODO: too much hardcode here
+    startup_script = '''#!/bin/sh
+echo '--> Install blender dependencies'
+apt update
+apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+
+if [ ! -x /srv/blender/blender ]; then
+    echo '--> Download & unpack blender'
+    echo "{blender_sha256} -" > /tmp/blender.sha256
+    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256
+    mkdir -p /srv/blender
+    tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
+fi
+
+echo '--> Download & run the BlendNet manager'
+adduser --shell /bin/false --disabled-password blendnet-user
+gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/work_manager/*' "$(getent passwd blendnet-user | cut -d: -f6)"
+gsutil -m rm 'gs://{project}-blendnet-{session_id}/work_manager/**'
+gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/blendnet' /srv
+
+cat <<'EOF' > /etc/systemd/system/blendnet-manager.service
+[Unit]
+Description=BlendNet Manager Service
+After=network-online.target google-network-daemon.service
+
+[Service]
+User=blendnet-user
+WorkingDirectory=~
+Type=simple
+ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
+Restart=always
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl start blendnet-manager.service # We don't need "enable" here
+    '''.format(
+        blender_sha256=blender_sha256,
+        blender_url=blender_url,
+        project=configs['project'],
+        session_id=session_id,
+    )
+    #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py' blendnet-user
+
+    data = {
+        'name': name,
+        'machineType': machine,
+        'minCpuPlatform': 'Intel Skylake', # Using the best option
+        'description': 'BlendNet Agents Manager',
+        'labels': {
+            'app': 'blendnet',
+            'type': 'manager',
+            'session_id': session_id,
+        },
+        'tags': { # TODO: add a way to specify custom tags
+            'items': ['blendnet-manager']
+        },
+        'disks': [{
+            'boot': True,
+            'autoDelete': True,
+            'initializeParams': {
+                'sourceImage': image_res['selfLink'],
+                'diskSizeGb': '200',
+            },
+        }],
+        'networkInterfaces': [{
+            'network': 'global/networks/default', # TODO: a way to specify network to use
+            'accessConfigs': [{
+                'type': 'ONE_TO_ONE_NAT', # Required here to allow easy connection from
+                'name': 'External NAT',   # the Addon to monitor the activity and status
+                'networkTier': 'PREMIUM', # TODO: add option to use only internal IPs
+            }],
+        }],
+        'serviceAccounts': [{
+            'email': 'default', # TODO: add a way to use specified service account
+            'scopes': [
+              'https://www.googleapis.com/auth/compute',
+              'https://www.googleapis.com/auth/servicecontrol',
+              'https://www.googleapis.com/auth/service.management.readonly',
+              'https://www.googleapis.com/auth/logging.write',
+              'https://www.googleapis.com/auth/monitoring.write',
+              'https://www.googleapis.com/auth/trace.append',
+              'https://www.googleapis.com/auth/devstorage.full_control',
+            ],
+        }],
+        'metadata': {
+            'items': [{
+                'key': 'startup-script',
+                'value': startup_script,
+            }],
+        },
+    }
+
+    # Creating an instance
+    resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+    return True
+
+def createInstanceAgent(instance_type, session_id, name):
+    '''Creating a new instance for BlendNet Agent'''
+
+    compute, configs = _getCompute(), _getConfigs()
+    # TODO: option to specify prefix/suffix for the name
+    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], instance_type)
+    # TODO: add option to specify the image to use
+    #image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
+    image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
+
+    # TODO: make script overridable
+    # TODO: a way to use custom url's to download the deps
+    blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
+    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
+    # TODO: too much hardcode here
+    startup_script = '''#!/bin/sh
+echo '--> Install blender dependencies'
+apt update
+apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+
+if [ ! -x /srv/blender/blender ]; then
+    echo '--> Download & unpack blender'
+    echo "{blender_sha256} -" > /tmp/blender.sha256
+    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256
+    mkdir -p /srv/blender
+    tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
+fi
+
+echo '--> Download & run the BlendNet agent'
+adduser --shell /bin/false --disabled-password blendnet-user
+gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/work_{name}/*' "$(getent passwd blendnet-user | cut -d: -f6)"
+gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/blendnet' /srv
+
+cat <<'EOF' > /etc/systemd/system/blendnet-agent.service
+[Unit]
+Description=BlendNet Agent Service
+After=network-online.target google-network-daemon.service
+
+[Service]
+User=blendnet-user
+WorkingDirectory=~
+Type=simple
+ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
+Restart=always
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl start blendnet-agent.service # We don't need "enable" here
+    '''.format(
+        blender_sha256=blender_sha256,
+        blender_url=blender_url,
+        project=configs['project'],
+        session_id=session_id,
+        name=name,
+    )
+    #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py' blendnet-user
+
+    data = {
+        'name': name,
+        'machineType': machine,
+        'minCpuPlatform': 'Intel Skylake', # Using the best option
+        'description': 'BlendNet Agent worker',
+        'scheduling': {
+            'preemptible': True,
+        },
+        'labels': {
+            'app': 'blendnet',
+            'type': 'agent',
+            'session_id': session_id,
+        },
+        'tags': { # TODO: add a way to specify custom tags
+            'items': ['blendnet-agent'],
+        },
+        'disks': [{
+            'boot': True,
+            'autoDelete': True,
+            'initializeParams': {
+                'sourceImage': image_res['selfLink'],
+                'diskSizeGb': '200',
+            },
+        }],
+        'networkInterfaces': [{
+            'network': 'global/networks/default', # TODO: a way to specify network to use
+            'accessConfigs': [{
+                'type': 'ONE_TO_ONE_NAT', # Here to allow to download the blender dependencies
+                'name': 'External NAT',   # and will be removed by the Manager when agent will
+                'networkTier': 'PREMIUM', # respond on the port with a proper status
+            }],
+        }],
+        'serviceAccounts': [{
+            'email': 'default', # TODO: add a way to use specified service account
+            'scopes': [
+                'https://www.googleapis.com/auth/devstorage.read_only',
+                'https://www.googleapis.com/auth/logging.write',
+                'https://www.googleapis.com/auth/monitoring.write',
+                'https://www.googleapis.com/auth/servicecontrol',
+                'https://www.googleapis.com/auth/service.management.readonly',
+                'https://www.googleapis.com/auth/trace.append',
+            ],
+        }],
+        'metadata': {
+            'items': [{
+                'key': 'startup-script',
+                'value': startup_script,
+            }],
+        },
+    }
+
+    # Creating an instance
+    resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+    return True
+
+def removeInstanceExternalIP(instance_name):
+    '''Will remove the external IP from the instance and return an internal one'''
+
+    compute, configs = _getCompute(), _getConfigs()
+
+    # Request the internal ip
+    resp = _getInstance(instance_name)
+    if not resp:
+        return None
+
+    ip = resp['networkInterfaces'][0]['networkIP']
+
+    # Removing the external IP
+    resp = compute.instances().deleteAccessConfig(
+        project=configs['project'], zone=configs['zone'],
+        instance=instance_name,
+        accessConfig='External NAT',
+        networkInterface='nic0'
+    ).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+    return ip
+
+def startInstance(instance_name):
+    '''Start stopped instance with specified name'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    resp = compute.instances().start(project=configs['project'], zone=configs['zone'], instance=instance_name).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+def stopInstance(instance_name):
+    '''Stop instance with specified name'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    resp = compute.instances().stop(project=configs['project'], zone=configs['zone'], instance=instance_name).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+def deleteInstance(instance_name):
+    '''Delete the instance with specified name'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    resp = compute.instances().delete(project=configs['project'], zone=configs['zone'], instance=instance_name).execute()
+
+    # Waiting for the operation to complete
+    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+
+def createFirewall(target_tag, port):
+    '''Create minimal firewall to access external IP of manager/agent'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    body = {
+        'name': '%s-%d' % (target_tag, port),
+        'network': 'global/networks/default',
+        'direction': 'INGRESS',
+        'description': 'Created by BlendNet to allow access to the service',
+        'allowed': [{
+            'IPProtocol': 'tcp',
+            'ports': [str(port)],
+        }],
+        'sourceRanges': ['0.0.0.0/0'],
+        'targetTags': [target_tag],
+    }
+
+    try:
+        # TODO: wait for complete
+        return compute.firewalls().insert(project=configs['project'], body=body).execute()
+    except: # TODO: Check for the more specific exceptions
+        return None
+
+def _getBucket(bucket_name):
+    '''Returns info about bucket or None'''
+    storage, configs = _getStorage(), _getConfigs()
+    try:
+        # TODO: handle issues with api unavailable or something
+        return storage.buckets().get(bucket=bucket_name).execute()
+    except: # TODO: be more specific here - exception could mean anything
+        return None
+
+def createBucket(bucket_name):
+    '''Creates bucket if it's not exists'''
+    storage, configs = _getStorage(), _getConfigs()
+
+    if _getBucket(bucket_name):
+        return True
+
+    body = {
+        'name': bucket_name,
+        'location': configs['region'],
+    }
+
+    # TODO: handle issues with api unavailable
+    storage.buckets().insert(project=configs['project'], body=body).execute()
+
+    return True
+
+def uploadFileToBucket(path, bucket_name, dest_path = None):
+    '''Upload file to the bucket'''
+    from googleapiclient.http import MediaIoBaseUpload
+    storage = _getStorage()
+
+    body = {
+        'name': dest_path or path,
+    }
+
+    print('INFO: Uploading file to "gs://%s/%s"...' % (bucket_name, body['name']))
+    with open(path, 'rb') as f:
+        # TODO: make sure file uploaded or there is an isssue
+        resp = storage.objects().insert(
+            bucket=bucket_name, body=body,
+            media_body=MediaIoBaseUpload(f, 'application/octet-stream', chunksize=8*1024*1024),
+        ).execute()
+
+    return True
+
+def uploadDataToBucket(data, bucket_name, dest_path):
+    '''Upload file to the bucket'''
+    from googleapiclient.http import MediaInMemoryUpload
+    storage = _getStorage()
+
+    body = {
+        'name': dest_path,
+    }
+
+    print('INFO: Uploading data to "gs://%s/%s"...' % (bucket_name, body['name']))
+    # TODO: make sure file uploaded or there is an isssue
+    resp = storage.objects().insert(
+        bucket=bucket_name, body=body,
+        media_body=MediaInMemoryUpload(data, mimetype='application/octet-stream'),
+    ).execute()
+
+    return True
+
+def downloadDataFromBucket(bucket_name, path):
+    from googleapiclient.http import MediaIoBaseDownload
+    from io import BytesIO
+
+    storage = _getStorage()
+
+    print('INFO: Downloading data from "gs://%s/%s"...' % (bucket_name, path))
+    req = storage.objects().get_media(bucket=bucket_name, object=path)
+    data_fd = BytesIO()
+    downloader = MediaIoBaseDownload(data_fd, req, chunksize=8*1024*1024)
+
+    try:
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+    except Exception as e:
+        print('WARN: Downloading failed: %s' % e)
+        return None
+
+    return data_fd.getvalue()
+
+def getResources(session_id):
+    '''Get the allocated resources with a specific session_id'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    out = {'agents':{}}
+
+    def parseInstanceInfo(it):
+        access_cfgs = it['networkInterfaces'][0].get('accessConfigs', [{}])
+        return {
+            'name': it['name'],
+            'ip': access_cfgs[0].get('natIP'),
+            'internal_ip': it['networkInterfaces'][0]['networkIP'],
+            'type': it['machineType'].rsplit('/', 1)[1],
+            'started': it['status'] == 'RUNNING',
+            'stopped': it['status'] == 'TERMINATED',
+            'created': it['creationTimestamp'],
+        }
+
+    req = compute.instances().list(
+        project=configs['project'], zone=configs['zone'],
+        filter='labels.session_id = "%s"' % session_id
+    )
+
+    while req is not None:
+        resp = req.execute()
+        for it in resp.get('items', []):
+            inst = parseInstanceInfo(it)
+            if it['labels'].get('type') == 'manager':
+                out['manager'] = inst
+            elif it['labels'].get('type') == 'agent':
+                out['agents'][inst['name']] = inst
+            else:
+                print('WARN: Unknown resource instance %s' % inst['name'])
+
+        req = compute.instances().list_next(previous_request=req, previous_response=resp)
+
+    return out
+
+def getManagerSizeDefault():
+    return 'n1-standard-1'
+
+def getAgentSizeDefault():
+    return 'n1-highcpu-16'
+
+def getBucketName(session_id):
+    '''Returns the appropriate bucket name'''
+    configs = _getConfigs()
+    return '%s-blendnet-%s' % (configs['project'], session_id.lower())
+
+def getManagerName(session_id):
+    return 'blendnet-%s-manager' % session_id
+
+def getAgentsNamePrefix(session_id):
+    return 'blendnet-%s-agent-' % session_id
+
+findGoogleCloudSdk()
+
+if GOOGLE_CLOUD_SDK_ROOT:
+    loadGoogleCloudSdk()
+
+from .Manager import Manager
+from .Agent import Agent
+from .Instance import Instance
