@@ -48,6 +48,9 @@ scene.render.threads_mode = 'AUTO'
 
 scene.cycles.device = 'CPU' # The only one supported right now
 
+# Disabling square samples - script is getting the real number of samples to render
+scene.cycles.use_square_samples = False
+
 # Set sampling
 print('INFO: Set sampling')
 if scene.cycles.progressive == 'PATH':

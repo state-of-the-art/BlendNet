@@ -475,6 +475,10 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         elif scene.cycles.progressive == 'BRANCHED_PATH':
             samples = scene.cycles.aa_samples
 
+        # Addon need to pass the actual samples number to the manager
+        if scene.cycles.use_square_samples:
+            samples *= samples
+
         cfg = {
             'samples': samples,
             'frame': scene.frame_current,
