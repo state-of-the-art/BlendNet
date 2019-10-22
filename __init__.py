@@ -636,6 +636,16 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             self._prev_status = status
             self._prev_message = message
 
+    def secToTime(self, sec):
+        h = sec // 3600
+        m = (sec % 3600) // 60
+        out = str((sec % 3600) % 60)+'s'
+        if h or m:
+            out = str(m)+'m'+out
+        if h:
+            out = str(h)+'h'+out
+        return out
+
     def render(self, depsgraph):
         import time
         scene = depsgraph.scene
@@ -682,7 +692,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             if status.get('state') == 'RUNNING':
                 remaining = None
                 if status.get('remaining'):
-                    remaining = bpy.utils.smpte_from_seconds(status.get('remaining'))[:-3].replace('00:', '')
+                    remaining = self.secToTime(status.get('remaining'))
                 self.updateStats('Rendered samples: %s/%s | Remaining: %s' % (
                     status.get('samples_done'), status.get('samples'),
                     remaining,
@@ -694,6 +704,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             # TODO: make possible to use ### in the out path to save result using frame number
             if status.get('state') == 'COMPLETED':
                 if not loaded_final_render:
+                    total_time = self.secToTime((status.get('end_time') or 0) - (status.get('start_time_actual') or 0))
                     out_file = os.path.join(out_path, '%s.exr' % task_name)
                     checksum = prev_status.get('result', {}).get('render')
                     # Check the local file first - maybe it's the thing we need
@@ -704,7 +715,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                             for chunk in iter(lambda: f.read(1048576), b''):
                                 sha1_calc.update(chunk)
                         if sha1_calc.hexdigest() == status.get('result', {}).get('render'):
-                            self.updateStats('Got the final render!')
+                            self.updateStats('Got the final render! | Total time: %s' % total_time)
                             update_render = out_file
                             checksum = sha1_calc.hexdigest()
                             loaded_final_render = True
@@ -713,7 +724,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                     if checksum != status.get('result', {}).get('render'):
                         self.updateStats('Downloading the final render...')
                         BlendNet.addon.managerTaskResultDownload(task_name, 'render', out_file)
-                        self.updateStats('Got the final render!')
+                        self.updateStats('Got the final render! | Total time: %s' % total_time)
                         update_render = out_file
                         loaded_final_render = True
             elif status.get('result', {}).get('preview') != prev_status.get('result', {}).get('preview'):

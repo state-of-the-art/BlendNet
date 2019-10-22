@@ -30,6 +30,7 @@ class ManagerTask(TaskBase):
 
         with self._status_lock:
             self._status.update({
+                'start_time_actual': None, # Time of the first agent task started
                 'samples_per_workload': None, # How much samples manager give to one agent
                 'samples_acquired': 0, # How much samples was taken to process by agents
                 'workloads_taken': 0, # How much agent tasks was taken
@@ -213,6 +214,12 @@ class ManagerTask(TaskBase):
                 param = 'state'
                 if prev_status.get(param) != task_status.get(param):
                     print('DEBUG: task %s %s changed: %s' % (task_name, param, task_status.get(param)))
+
+                    if task_status.get('state') == TaskState.RUNNING.name:
+                        with self._status_lock:
+                            # Set the actual start time when the first agent task reported about it
+                            if not self._status['start_time_actual']:
+                                self._status['start_time_actual'] = task_status.get('start_time')
 
                     if task_status.get('state') == TaskState.STOPPED.name:
                         print('WARN: The agent task %s was stopped' % task_name)
