@@ -530,9 +530,8 @@ class BlendNetRenderPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        # Only cycles is supported right now
-        return bpy.context.scene.render.engine != __package__ \
-                and bpy.context.scene.render.engine == 'CYCLES'
+        # Allow to see the tasks if selected blendnet and support cycles
+        return bpy.context.scene.render.engine in ('CYCLES', __package__)
 
     def draw(self, context):
         layout = self.layout
@@ -543,9 +542,10 @@ class BlendNetRenderPanel(bpy.types.Panel):
         row = box.row()
         row.label(text='BlendNet Render')
         row.label(text=context.window_manager.blendnet.status)
-        row = box.row(align=True)
-        row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
-        row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
+        if bpy.context.scene.render.engine != __package__:
+            row = box.row(align=True)
+            row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
+            row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
         if BlendNet.addon.isManagerActive():
             box.template_list('TASKS_UL_list', '', wm.blendnet, 'manager_tasks', wm.blendnet, 'manager_tasks_idx', rows=1)
             box.operator('blendnet.taskpreview', text='Task Preview', icon='RENDER_STILL')
