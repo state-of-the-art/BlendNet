@@ -702,7 +702,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                         sha1_calc = hashlib.sha1()
                         with open(out_file, 'rb') as f:
                             for chunk in iter(lambda: f.read(1048576), b''):
-                                sha1.update(chunk)
+                                sha1_calc.update(chunk)
                         if sha1_calc.hexdigest() == status.get('result', {}).get('render'):
                             self.updateStats('Got the final render!')
                             update_render = out_file
