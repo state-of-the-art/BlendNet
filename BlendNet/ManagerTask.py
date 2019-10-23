@@ -268,8 +268,6 @@ class ManagerTask(TaskBase):
                     self.stateComplete()
                     continue
 
-            print('DEBUG: Updating task status for "%s" is done' % self.name())
-
             time.sleep(1.0)
 
         with self._state_lock:

@@ -421,7 +421,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         self._task_name = None
 
         context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(0.5, window=context.window)
+        self.timer = context.window_manager.event_timer_add(0.1, window=context.window)
 
         return {'RUNNING_MODAL'}
 
@@ -446,28 +446,31 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             d = datetime.utcnow().strftime('%y%m%d%H%M')
             self._task_name = '%s-%s-%d-%s' % (fname, d, scene.frame_current, BlendNet.addon.genRandomString(3))
 
-        print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
+            print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
 
-        # Create task by upload project file
-        self.report({'INFO'}, 'Creating task "%s"' % self._task_name)
-        if not BlendNet.addon.managerTaskUploadFile(self._task_name, self._project_file, fname+'.blend'):
-            self.report({'WARNING'}, 'Unable to create the task "%s", let\'s retry...' % self._task_name)
+            # Prepare list of files need to be uploaded
+            base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
+            deps, bad = blend_file.getDependencies()
+            if bad:
+                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
+                return {'CANCELLED'}
+
+            deps_map = dict([ (rel, os.path.join(base_dir, rel)) for rel in deps ])
+            deps_map[fname+'.blend'] = self._project_file
+
+            # Run the dependencies upload background process
+            BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
+
+            # Slow down the check process
+            context.window_manager.event_timer_remove(self.timer)
+            self.timer = context.window_manager.event_timer_add(3.0, window=context.window)
+
+        if BlendNet.addon.manager_task_upload_status:
+            self.report({'INFO'}, 'Uploading process: %s' % BlendNet.addon.manager_task_upload_status)
             return {'PASS_THROUGH'}
 
-        # Dependencies upload
-        base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
-        deps, bad = blend_file.getDependencies()
-        if bad:
-            self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
-            return {'CANCELLED'}
-
-        for fpath in deps:
-            self.report({'INFO'}, 'Uploading dependency "%s" to task "%s"' % (fpath, self._task_name))
-            if not BlendNet.addon.managerTaskUploadFile(self._task_name, os.path.join(base_dir, fpath), fpath):
-                self.report({'WARNING'}, 'Unable to upload dependency for the task "%s", let\'s retry...' % self._task_name)
-                return {'PASS_THROUGH'}
-
         # Configuring the task
+        print('INFO: Configuring task "%s"' % self._task_name)
         self.report({'INFO'}, 'Configuring task "%s"' % self._task_name)
         samples = None
         if scene.cycles.progressive == 'PATH':

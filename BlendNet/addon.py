@@ -341,8 +341,34 @@ def toggleManager():
 
     _runBackgroundWork(worker, getConfig())
 
-def managerTaskUploadFile(task, file_path, rel_path):
-    return ManagerClient(getManagerIP(), getConfig()).taskFilePut(task, file_path, rel_path)
+manager_task_upload_status = None
+
+def managerTaskUploadFiles(task, files_map):
+    '''Multithreading upload files'''
+
+    def worker(task, files_map):
+        global manager_task_upload_status
+        while files_map:
+            rel_path = list(files_map).pop()
+            file_path = files_map[rel_path]
+            manager_task_upload_status = 'Uploading task "%s" file "%s"' % (task, rel_path)
+            result = ManagerClient(getManagerIP(), getConfig()).taskFilePut(task, file_path, rel_path)
+            if result:
+                files_map.pop(rel_path)
+                print('INFO: Task "%s" file "%s" upload complete' % (task, rel_path))
+            else:
+                print('WARN: Error during upload the task "%s" file "%s"' % (task, rel_path))
+                time.sleep(1.0)
+
+        manager_task_upload_status = None
+
+    global manager_task_upload_status
+    if manager_task_upload_status:
+        print('ERROR: Upload files already in progress...')
+        return
+
+    manager_task_upload_status = 'Preparing...'
+    _runBackgroundWork(worker, task, files_map)
 
 def managerTaskConfig(task, conf):
     return ManagerClient(getManagerIP(), getConfig()).taskConfigPut(task, conf)
