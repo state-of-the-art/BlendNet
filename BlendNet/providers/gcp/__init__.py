@@ -210,9 +210,12 @@ def createInstanceManager(instance_type, session_id, name):
     blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
-echo '--> Install blender dependencies'
-apt update
-apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+echo '--> Check for blender dependencies'
+dpkg -l libxrender1 libxi6 libgl1
+if [ $? -gt 0 ]; then
+    apt update
+    apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+fi
 
 if [ ! -x /srv/blender/blender ]; then
     echo '--> Download & unpack blender'
@@ -328,9 +331,12 @@ def createInstanceAgent(instance_type, session_id, name):
     blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
-echo '--> Install blender dependencies'
-apt update
-apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+echo '--> Check for blender dependencies'
+dpkg -l libxrender1 libxi6 libgl1
+if [ $? -gt 0 ]; then
+    apt update
+    apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+fi
 
 if [ ! -x /srv/blender/blender ]; then
     echo '--> Download & unpack blender'
