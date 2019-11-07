@@ -43,13 +43,12 @@ class AgentTask(TaskBase):
                 process = self.runBlenderScriptProcessor(ws_path, 'render')
                 self._watchBlenderScriptProcessor(process, ws_path)
         except Exception as e:
-            self.stateStop()
-            return print('ERROR: Exception occurred during task "%s" execution: %s' % (self.name(), e))
+            print('ERROR: Exception occurred during task "%s" execution: %s' % (self.name(), e))
         finally:
             self._parent._fc.workspaceClean(self.name())
 
-        print('INFO: Execution of the task "%s" completed' % self.name())
-        self.stateComplete()
+        print('INFO: Execution of the task "%s" is done' % self.name())
+        self.stateStop()
 
         with self._execution_lock:
             self._execution_watcher = None
@@ -63,6 +62,8 @@ class AgentTask(TaskBase):
 
         prepare_time = None
 
+        # Task is properly finished
+        finished = False
         # Task was interrupted
         interrupted = False
         # Used to capture previews periodically
@@ -149,6 +150,7 @@ class AgentTask(TaskBase):
                         print('ERROR: Unable to send "savePreview" command due to exception: %s' % e)
 
                 if operation in ('Finished', 'Cancel | Cancelled'):
+                    finished = operation == 'Finished'
                     process.stdin.write(b'end\n')
                     process.stdin.flush()
                     self.statusRenderTimeSet(time_sec - prepare_time)
@@ -219,5 +221,5 @@ class AgentTask(TaskBase):
         print('INFO: Read of process stdout completed')
         process.communicate()
 
-        if interrupted:
-            self.stateStop()
+        if finished:
+            self.stateComplete()
