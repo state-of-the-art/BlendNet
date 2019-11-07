@@ -111,6 +111,9 @@ def startInstance(name):
 def stopInstance(name):
     return _execProviderFunc('stopInstance', '', name)
 
+def deleteInstance(name):
+    return _execProviderFunc('deleteInstance', '', name)
+
 def downloadDataFromBucket(bucket_name, path):
     return _execProviderFunc('downloadDataFromBucket', None, bucket_name, path)
 

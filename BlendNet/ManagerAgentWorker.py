@@ -170,11 +170,17 @@ class ManagerAgentWorker:
     def _stateWatcher(self):
         '''Watch on the agent state'''
         print('DEBUG: Starting agent state watcher %s' % self._name)
+        agent = self._parent.resourcesGet().get('agents', {}).get(self._name, {})
         while self._enabled:
             # If the parent is going to shutdown - let's stop the agent too
             if self._parent.isTerminating():
                 print('WARN: Stopping the agent %s due to Manager termination' % self._name)
                 providers.stopInstance(self._name)
+
+            # Destroy agent if it's type is wrong
+            if agent and agent.get('type') != self._cfg['instance_type']:
+                print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (self._name, agent.get('type'), self._cfg['instance_type']))
+                providers.deleteInstance(self._name)
 
             # STARTED/ACTIVE - check agent status
             if self.state() in (ManagerAgentState.STARTED, ManagerAgentState.ACTIVE):
