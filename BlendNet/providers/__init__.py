@@ -1,4 +1,5 @@
 from .InstanceProvider import InstanceProvider
+from ..Workers import Workers
 
 import os, importlib
 
@@ -122,19 +123,24 @@ def setupBucket(bucket_name, cfg):
 
     _execProviderFunc('createBucket', None, bucket_name)
 
+    workers = Workers(
+        'Uploading BlendNet logic to the bucket "%s"' % bucket_name,
+        8,
+        uploadFileToBucket,
+    )
+
     # Walk through python files and upload them
     dirpath = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    upload_files = {}
     for root, dirs, files in os.walk(dirpath):
         for f in files:
             if not f.endswith('.py'):
                 continue
             filepath = os.path.join(root, f)
-            upload_files[filepath.replace(dirpath, 'blendnet', 1)] = filepath
+            workers.add(filepath, bucket_name, filepath.replace(dirpath, 'blendnet', 1))
 
-    # TODO: upload files multithread
-    for dest, filepath in upload_files.items():
-        uploadFileToBucket(filepath, bucket_name, dest)
+    workers.start()
 
     import json
     uploadDataToBucket(json.dumps(cfg).encode('utf-8'), bucket_name, 'work_manager/manager.json')
+
+    workers.wait()

@@ -465,8 +465,9 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             context.window_manager.event_timer_remove(self.timer)
             self.timer = context.window_manager.event_timer_add(3.0, window=context.window)
 
-        if BlendNet.addon.manager_task_upload_status:
-            self.report({'INFO'}, 'Uploading process: %s' % BlendNet.addon.manager_task_upload_status)
+        status = BlendNet.addon.managerTaskUploadFilesStatus()
+        if status:
+            self.report({'INFO'}, 'Uploading process for task %s: %s' % (self._task_name, status))
             return {'PASS_THROUGH'}
 
         # Configuring the task

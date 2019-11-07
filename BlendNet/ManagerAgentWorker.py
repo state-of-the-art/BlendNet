@@ -9,11 +9,11 @@ import time # We need timestamps
 import threading # Sync between threads needed
 import json
 from enum import Enum
-import queue
 
 from . import providers
 from .AgentClient import AgentClient
 from . import SimpleREST
+from .Workers import Workers
 
 class ManagerAgentState(Enum):
     UNKNOWN = 0
@@ -247,37 +247,29 @@ class ManagerAgentWorker:
         print('DEBUG: Uploading %d files to Agent "%s" task "%s"' % (len(files_map), self._name, task_name))
         self._waitAgent()
 
-        to_upload = queue.Queue()
-        for path, sha1 in files_map.items():
-            to_upload.put((task_name, path, sha1))
+        workers = Workers(
+            'Uploading to Agent "%s" task "%s"' % (self._name, task_name),
+            self._cfg['upload_workers'],
+            self._uploadFilesWorker,
+        )
 
-        threads = []
-        for i in range(self._cfg['upload_workers']):
-            thread = threading.Thread(target=self._uploadFilesWorker, args=(to_upload,))
-            thread.start()
-            threads.append(thread)
+        workers.addSet(set( (task_name, path, sha1) for path, sha1 in files_map.items() ))
+        workers.wait()
 
-        for t in threads:
-            t.join()
+        print('DEBUG: Uploading files to Agent "%s" task "%s" completed' % (self._name, task_name))
+        return True
 
-        if to_upload.empty():
-            print('DEBUG: Uploading files to Agent "%s" task "%s" completed' % (self._name, task_name))
-            return True
-
-        print('ERROR: Something wrong happened during upload files to Agent "%s" task "%s"' % (self._name, task_name))
-
-    def _uploadFilesWorker(self, files_queue):
-        '''Gets queue with items (task, path, sha1) and uploads using client'''
-        print('DEBUG: Uploading worker created for "%s"' % self._name)
+    def _uploadFilesWorker(self, task, rel_path, sha1):
+        '''Gets item and uploads using client'''
         while self._enabled:
-            try:
-                task, rel_path, sha1 = files_queue.get(False)
-                size = self._parent.blobGet(sha1).get('size')
-                with self._parent.blobGetStream(sha1) as stream:
-                    self._client.taskFileStreamPut(task, rel_path, stream, size, sha1)
-            except queue.Empty as e:
-                break
-        print('DEBUG: Uploading worker stopped')
+            size = self._parent.blobGet(sha1).get('size')
+            with self._parent.blobGetStream(sha1) as stream:
+                ret = self._client.taskFileStreamPut(task, rel_path, stream, size, sha1)
+                if ret:
+                    break
+                print('WARN: Uploading of "%s" to task "%s" failed, repeating...' % (rel_path, task))
+                time.sleep(1.0)
+        print('DEBUG: Uploading of "%s" to task "%s" completed' % (rel_path, task))
 
     def sendWorkload(self, task_name, workload):
         '''Sending task configuration to the Agent'''
