@@ -126,7 +126,6 @@ class ManagerTask(TaskBase):
             if left_to_acquire <= 0:
                 return {} # No work is available
 
-            self._status['workloads_taken'] += 1
             if not self._status['samples_per_workload']:
                 self._status['samples_per_workload'] = self.calculateWorkloadSamples(self._cfg.samples, self._cfg.agents_num)
 
@@ -137,15 +136,13 @@ class ManagerTask(TaskBase):
             self._status['samples_acquired'] += workload['samples']
             # Append to seed to make agent render unique
             workload['seed'] += self._status['workloads_taken']
-            workload['task_name'] = '%s_%d-%d' % (
-                self._name,
-                self._status['samples_acquired']-workload['samples']+1,
-                self._status['samples_acquired']
-            )
+            workload['task_name'] = '%s_%d' % (self._name, self._status['workloads_taken'])
 
             # Put agent task into executions list
             with self._execution_lock:
                 self._executions[workload['task_name']] = agent
+
+            self._status['workloads_taken'] += 1
 
             return workload
 
