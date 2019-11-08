@@ -47,6 +47,9 @@ class ManagerTask(TaskBase):
         self._results_render = {}
         self._results_watcher = None
 
+        self._results_to_remove_lock = threading.Lock()
+        self._results_to_remove = set()
+
     def statusResultsProcessingSet(self, val):
         with self._status_lock:
             self._status['results_processing'] = val
@@ -105,6 +108,12 @@ class ManagerTask(TaskBase):
             except Exception as e:
                 print('ERROR: Exception occurred during merging the results for task "%s": %s' % (self.name(), e))
 
+            # Clean the old result blobs
+            with self._results_to_remove_lock:
+                for blob_id in self._results_to_remove_lock:
+                    self._parent._fc.blobRemove(blob_id)
+                self._results_to_remove_lock.clear()
+
         self._results_watcher = None
         print('DEBUG: Stopped ManagerTask "%s" results watcher' % self.name())
 
@@ -159,7 +168,8 @@ class ManagerTask(TaskBase):
             old_blob_id = self._results_preview.get(agent_task)
             self._results_preview[agent_task] = blob_id
         if old_blob_id:
-            self._parent._fc.blobRemove(old_blob_id)
+            with self._results_to_remove_lock:
+                self._results_to_remove.add(old_blob_id)
 
     def updateRender(self, agent_task, blob_id):
         '''Run process of merging the available renders and update the task results'''
@@ -169,7 +179,8 @@ class ManagerTask(TaskBase):
             old_blob_id = self._results_render.get(agent_task)
             self._results_render[agent_task] = blob_id
         if old_blob_id:
-            self._parent._fc.blobRemove(old_blob_id)
+            with self._results_to_remove_lock:
+                self._results_to_remove.add(old_blob_id)
 
     def _executionWatcher(self):
         '''Looking for the task execution on the agents, collecting renders together'''
