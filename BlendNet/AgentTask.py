@@ -68,8 +68,8 @@ class AgentTask(TaskBase):
         interrupted = False
         # Used to capture previews periodically
         sample_preview_save_time = 0
-        # Used to set the finished/cancelled sample
-        curr_sample = None
+        # Used to contain the current rendering sample
+        curr_sample = 0
         for line in iter(process.stdout.readline, b''):
             l = line.decode('utf-8').rstrip()
             print(">>> %s" % l)
@@ -140,8 +140,8 @@ class AgentTask(TaskBase):
                     prepare_time = time_sec
                     self.statusPrepareTimeSet(prepare_time)
 
-                # Update preview every 5 second of rendering
-                if isinstance(curr_sample, int) and time.time() > sample_preview_save_time + 5:
+                # Update preview every 5 second
+                if curr_sample > 1 and time.time() > sample_preview_save_time + 5:
                     try:
                         sample_preview_save_time = time.time()
                         process.stdin.write(b'savePreview\n')
@@ -157,7 +157,7 @@ class AgentTask(TaskBase):
                     self.statusSamplesDoneSet(curr_sample)
 
             # Saving the results
-            if curr_sample:
+            if curr_sample > 1:
                 if l.startswith('INFO: Command "savePreview" completed'):
                     blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'preview.exr'))
                     self.statusPreviewSet(blob['id'] if blob else None)
