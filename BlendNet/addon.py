@@ -8,6 +8,7 @@ import threading
 
 from . import providers
 from . import ManagerClient
+from .Workers import Workers
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
@@ -341,8 +342,41 @@ def toggleManager():
 
     _runBackgroundWork(worker, getConfig())
 
-def managerTaskUploadFile(task, file_path, rel_path):
-    return ManagerClient(getManagerIP(), getConfig()).taskFilePut(task, file_path, rel_path)
+manager_task_upload_workers = None
+
+def _managerTaskUploadFilesWorker(task, rel_path, file_path):
+    '''Gets item and uploads using client'''
+    while True:
+        ret = ManagerClient(getManagerIP(), getConfig()).taskFilePut(task, file_path, rel_path)
+        if ret:
+            break
+        print('WARN: Uploading of "%s" to task "%s" failed, repeating...' % (rel_path, task))
+        time.sleep(1.0)
+    print('DEBUG: Uploading of "%s" to task "%s" completed' % (rel_path, task))
+
+def managerTaskUploadFiles(task, files_map):
+    '''Multithreading task files upload'''
+
+    if managerTaskUploadFilesStatus():
+        print('ERROR: Upload files already in progress...')
+        return
+
+    global manager_task_upload_workers
+    if manager_task_upload_workers == None:
+        manager_task_upload_workers = Workers(
+            'Uploading tasks files to Manager',
+            8,
+            _managerTaskUploadFilesWorker,
+        )
+
+    manager_task_upload_workers.addSet(set( (task, rel, path) for rel, path in files_map.items() ))
+
+def managerTaskUploadFilesStatus():
+    '''Returns string to show user about the status of uploading'''
+    global manager_task_upload_workers
+    if manager_task_upload_workers and manager_task_upload_workers.tasksLeft() > 0:
+        return '%d left to upload...' % manager_task_upload_workers.tasksLeft()
+    return None
 
 def managerTaskConfig(task, conf):
     return ManagerClient(getManagerIP(), getConfig()).taskConfigPut(task, conf)

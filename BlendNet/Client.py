@@ -120,7 +120,7 @@ class ClientEngine:
 
     def _requestExecuteRun(self, req):
         '''Executes the API request'''
-        with urllib.request.urlopen(req, timeout=60 if req.data else 10, context=self._context) as res:
+        with urllib.request.urlopen(req, timeout=3 if req.data else 10, context=self._context) as res:
             data = json.load(res)
             if not data.get('success', False):
                 # Something went wrong
@@ -131,7 +131,7 @@ class ClientEngine:
 
     def _requestDownloadRun(self, req):
         '''Executes the download request, uses req._out_path to store file or req._out_func as processing function'''
-        with urllib.request.urlopen(req, timeout=60, context=self._context) as res:
+        with urllib.request.urlopen(req, timeout=3, context=self._context) as res:
             length = res.headers['content-length']
             sha1 = res.headers['x-checksum-sha1']
             if not length or not sha1:

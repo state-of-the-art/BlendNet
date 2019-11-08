@@ -421,7 +421,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         self._task_name = None
 
         context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(0.5, window=context.window)
+        self.timer = context.window_manager.event_timer_add(0.1, window=context.window)
 
         return {'RUNNING_MODAL'}
 
@@ -446,34 +446,42 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             d = datetime.utcnow().strftime('%y%m%d%H%M')
             self._task_name = '%s-%s-%d-%s' % (fname, d, scene.frame_current, BlendNet.addon.genRandomString(3))
 
-        print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
+            print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
 
-        # Create task by upload project file
-        self.report({'INFO'}, 'Creating task "%s"' % self._task_name)
-        if not BlendNet.addon.managerTaskUploadFile(self._task_name, self._project_file, fname+'.blend'):
-            self.report({'WARNING'}, 'Unable to create the task "%s", let\'s retry...' % self._task_name)
+            # Prepare list of files need to be uploaded
+            base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
+            deps, bad = blend_file.getDependencies()
+            if bad:
+                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
+                return {'CANCELLED'}
+
+            deps_map = dict([ (rel, os.path.join(base_dir, rel)) for rel in deps ])
+            deps_map[fname+'.blend'] = self._project_file
+
+            # Run the dependencies upload background process
+            BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
+
+            # Slow down the check process
+            context.window_manager.event_timer_remove(self.timer)
+            self.timer = context.window_manager.event_timer_add(3.0, window=context.window)
+
+        status = BlendNet.addon.managerTaskUploadFilesStatus()
+        if status:
+            self.report({'INFO'}, 'Uploading process for task %s: %s' % (self._task_name, status))
             return {'PASS_THROUGH'}
 
-        # Dependencies upload
-        base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
-        deps, bad = blend_file.getDependencies()
-        if bad:
-            self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
-            return {'CANCELLED'}
-
-        for fpath in deps:
-            self.report({'INFO'}, 'Uploading dependency "%s" to task "%s"' % (fpath, self._task_name))
-            if not BlendNet.addon.managerTaskUploadFile(self._task_name, os.path.join(base_dir, fpath), fpath):
-                self.report({'WARNING'}, 'Unable to upload dependency for the task "%s", let\'s retry...' % self._task_name)
-                return {'PASS_THROUGH'}
-
         # Configuring the task
+        print('INFO: Configuring task "%s"' % self._task_name)
         self.report({'INFO'}, 'Configuring task "%s"' % self._task_name)
         samples = None
         if scene.cycles.progressive == 'PATH':
             samples = scene.cycles.samples
         elif scene.cycles.progressive == 'BRANCHED_PATH':
             samples = scene.cycles.aa_samples
+
+        # Addon need to pass the actual samples number to the manager
+        if scene.cycles.use_square_samples:
+            samples *= samples
 
         cfg = {
             'samples': samples,
@@ -530,9 +538,8 @@ class BlendNetRenderPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        # Only cycles is supported right now
-        return bpy.context.scene.render.engine != __package__ \
-                and bpy.context.scene.render.engine == 'CYCLES'
+        # Allow to see the tasks if selected blendnet and support cycles
+        return bpy.context.scene.render.engine in ('CYCLES', __package__)
 
     def draw(self, context):
         layout = self.layout
@@ -543,9 +550,10 @@ class BlendNetRenderPanel(bpy.types.Panel):
         row = box.row()
         row.label(text='BlendNet Render')
         row.label(text=context.window_manager.blendnet.status)
-        row = box.row(align=True)
-        row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
-        row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
+        if bpy.context.scene.render.engine != __package__:
+            row = box.row(align=True)
+            row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
+            row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
         if BlendNet.addon.isManagerActive():
             box.template_list('TASKS_UL_list', '', wm.blendnet, 'manager_tasks', wm.blendnet, 'manager_tasks_idx', rows=1)
             box.operator('blendnet.taskpreview', text='Task Preview', icon='RENDER_STILL')
@@ -636,6 +644,16 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             self._prev_status = status
             self._prev_message = message
 
+    def secToTime(self, sec):
+        h = sec // 3600
+        m = (sec % 3600) // 60
+        out = str((sec % 3600) % 60)+'s'
+        if h or m:
+            out = str(m)+'m'+out
+        if h:
+            out = str(h)+'h'+out
+        return out
+
     def render(self, depsgraph):
         import time
         scene = depsgraph.scene
@@ -682,7 +700,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             if status.get('state') == 'RUNNING':
                 remaining = None
                 if status.get('remaining'):
-                    remaining = bpy.utils.smpte_from_seconds(status.get('remaining'))[:-3].replace('00:', '')
+                    remaining = self.secToTime(status.get('remaining'))
                 self.updateStats('Rendered samples: %s/%s | Remaining: %s' % (
                     status.get('samples_done'), status.get('samples'),
                     remaining,
@@ -694,6 +712,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             # TODO: make possible to use ### in the out path to save result using frame number
             if status.get('state') == 'COMPLETED':
                 if not loaded_final_render:
+                    total_time = self.secToTime((status.get('end_time') or 0) - (status.get('start_time_actual') or 0))
                     out_file = os.path.join(out_path, '%s.exr' % task_name)
                     checksum = prev_status.get('result', {}).get('render')
                     # Check the local file first - maybe it's the thing we need
@@ -704,7 +723,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                             for chunk in iter(lambda: f.read(1048576), b''):
                                 sha1_calc.update(chunk)
                         if sha1_calc.hexdigest() == status.get('result', {}).get('render'):
-                            self.updateStats('Got the final render!')
+                            self.updateStats('Got the final render! | Total time: %s' % total_time)
                             update_render = out_file
                             checksum = sha1_calc.hexdigest()
                             loaded_final_render = True
@@ -713,7 +732,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                     if checksum != status.get('result', {}).get('render'):
                         self.updateStats('Downloading the final render...')
                         BlendNet.addon.managerTaskResultDownload(task_name, 'render', out_file)
-                        self.updateStats('Got the final render!')
+                        self.updateStats('Got the final render! | Total time: %s' % total_time)
                         update_render = out_file
                         loaded_final_render = True
             elif status.get('result', {}).get('preview') != prev_status.get('result', {}).get('preview'):
