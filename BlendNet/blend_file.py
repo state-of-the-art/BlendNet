@@ -49,6 +49,8 @@ def getCaches():
     localdir = bpy.path.abspath('//')
     pointcache_dir = 'blendcache_%s' % os.path.basename(bpy.data.filepath)[:-6]
     for o in bpy.data.objects:
+        if not o.visible_get():
+            continue
         for mod in o.modifiers:
             pcloc = None
             ext = None
@@ -114,7 +116,7 @@ def getCaches():
                     fname = '%s_%06d%s' % (fname, scene.frame_current, ext)
 
                 cpath = os.path.join(pointcache_dir, fname)
-                if not os.path.isfile(os.join(localdir, cpath)):
+                if not os.path.isfile(os.path.join(localdir, cpath)):
                     print('ERROR: Unable to locate pointcache file "%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
                     bad.add(cpath)
                 else:

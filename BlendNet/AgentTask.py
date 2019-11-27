@@ -7,6 +7,7 @@ Description: Task used by Agent to control jobs
 
 import os
 import time
+import signal
 
 from .TaskBase import TaskConfig, TaskBase
 
@@ -21,6 +22,8 @@ class AgentTask(TaskBase):
             self._status['result']['statistics'] = None
             self._status['result']['prepare_time'] = None
             self._status['result']['render_time'] = None
+
+        self._stop_task = False
 
     def statusStatisticsSet(self, statistics):
         with self._status_lock:
@@ -47,7 +50,7 @@ class AgentTask(TaskBase):
         finally:
             self._parent._fc.workspaceClean(self.name())
 
-        print('INFO: Execution of the task "%s" is done' % self.name())
+        print('INFO: Execution of the task "%s" is ended' % self.name())
         self.stateStop()
 
         with self._execution_lock:
@@ -189,11 +192,18 @@ class AgentTask(TaskBase):
 
                 self.statusStatisticsSet(statistics)
 
+            # Processing task stop
+            if self._stop_task and not interrupted:
+                interrupted = True
+                print('INFO: Stopping the task execution')
+                self.executionMessagesAdd('INFO: Stopping the worker process')
+                process.send_signal(signal.SIGINT) # Signal will cause Cancel event
+                continue
+
             # Do something on terminating
             if self._parent.isTerminating():
-                import signal
                 print('WARN: Detected terminating in %s' % self._parent.timeToTerminating())
-                self.executionMessagesAdd('WARN: Instance is going to terminate in %d sec' % self._parent.timeToTerminating())
+                self.executionMessagesAdd('WARN: Instance is going to be terminated in %d sec' % self._parent.timeToTerminating())
                 rem = self.status().get('remaining')
                 if rem:
                     # Ok some work is here, so need to check how much is remaining
@@ -223,3 +233,20 @@ class AgentTask(TaskBase):
 
         if finished:
             self.stateComplete()
+
+    def _stop(self):
+        self._stop_task = True
+
+    def statusPreviewSet(self, blob_id):
+        # Delete old blob with result
+        with self._status_lock:
+            if self._status['result']['preview']:
+                self._parent._fc.blobRemove(self._status['result']['preview'])
+        super().statusPreviewSet(blob_id)
+
+    def statusRenderSet(self, blob_id):
+        # Delete old blob with result
+        with self._status_lock:
+            if self._status['result']['render']:
+                self._parent._fc.blobRemove(self._status['result']['render'])
+        super().statusRenderSet(blob_id)

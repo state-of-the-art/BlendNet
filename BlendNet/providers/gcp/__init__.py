@@ -207,7 +207,7 @@ def createInstanceManager(instance_type, session_id, name):
     # TODO: make script overridable
     # TODO: a way to use custom url's to download the deps
     blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
-    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
+    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'
@@ -328,7 +328,7 @@ def createInstanceAgent(instance_type, session_id, name):
     # TODO: make script overridable
     # TODO: a way to use custom url's to download the deps
     blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
-    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2'
+    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'

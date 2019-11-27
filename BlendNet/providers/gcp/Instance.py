@@ -22,7 +22,9 @@ class Instance(InstanceProvider):
         '''Seconds to instance terminate'''
         if not self.isTerminating():
             return 24*3600
-        return self.timeOfTerminating() - time.time() + 30.0
+        # Not working well - sometimes instances terminating earlier
+        #return self.timeOfTerminating() - time.time() + 30.0
+        return self.timeOfTerminating() - time.time()
 
 
     def _terminatingWatchersReset(self):

@@ -133,21 +133,21 @@ class TaskBase(ABC):
 
     def statusPreviewSet(self, blob_id):
         with self._status_lock:
-            # Delete old blob with result
-            if self._status['result']['preview']:
-                self._parent._fc.blobRemove(self._status['result']['preview'])
             self._status['result']['preview'] = blob_id
 
     def statusRenderSet(self, blob_id):
         with self._status_lock:
-            if self._status['result']['render']:
-                self._parent._fc.blobRemove(self._status['result']['render'])
             self._status['result']['render'] = blob_id
 
     def canBeChanged(self):
         '''Returns True or False'''
         with self._state_lock:
             return self._state == TaskState.CREATED
+
+    def isPending(self):
+        '''Returns True or False'''
+        with self._state_lock:
+            return self._state == TaskState.PENDING
 
     def isRunning(self):
         '''Returns True or False'''
@@ -169,18 +169,30 @@ class TaskBase(ABC):
         with self._state_lock:
             return self._state in (TaskState.COMPLETED, TaskState.STOPPED)
 
+    def stateCreated(self):
+        with self._state_lock:
+            if self._state == TaskState.PENDING:
+                self._state = TaskState.CREATED
+
+    def statePending(self):
+        with self._state_lock:
+            if self._state in (TaskState.CREATED, TaskState.STOPPED):
+                self._state = TaskState.PENDING
+
     def stateStop(self):
         with self._state_lock:
             # It can't be stopped if it's already completed
             if self._state != TaskState.COMPLETED:
-                self._end_time = int(time.time())
+                if self._state == TaskState.RUNNING:
+                    self._end_time = int(time.time())
                 self._state = TaskState.STOPPED
 
     def stateComplete(self):
         with self._state_lock:
             # It can't be completed if it's already stopped
             if self._state != TaskState.STOPPED:
-                self._end_time = int(time.time())
+                if self._state == TaskState.RUNNING:
+                    self._end_time = int(time.time())
                 self._state = TaskState.COMPLETED
 
     def fileAdd(self, path, file_id):
@@ -215,9 +227,7 @@ class TaskBase(ABC):
 
             print('DEBUG: Starting task %s' % self.name())
 
-            self._state = TaskState.PENDING
-
-        return self._parent.taskToPending(self)
+        return self._parent.taskAddToPending(self)
 
     def start(self):
         '''Starting task execution'''
@@ -236,8 +246,14 @@ class TaskBase(ABC):
 
     def stop(self):
         '''Stop the task execution and collect results to maybe continue the task later'''
-        if self._state == TaskState.RUNNING:
-            self.stateStop()
+        if self.isPending():
+            self._parent.taskRemoveFromPending(self._name)
+        if self.isRunning():
+            self._stop()
+
+    @abstractmethod
+    def _stop(self):
+        '''Activate the stop process and return'''
 
     def executionDetailsGet(self):
         '''Variety of details about the execution'''
@@ -253,19 +269,42 @@ class TaskBase(ABC):
         with self._execution_details_lock:
             self._execution_details[task] = self._execution_details.get(task, []) + details
 
+    def executionDetailsAdd(self, details, task = None):
+        '''Adds a new details to the list'''
+        if not isinstance(details, list):
+            details = [details]
+        if not isinstance(task, str):
+            task = self.name()
+        self.executionDetailsSet(self._execution_details.get(task, []) + details, task)
+
+    def executionDetailsSet(self, details, task = None):
+        '''Set execution details'''
+        with self._execution_details_lock:
+            if task:
+                self._execution_details[task] = details
+            else:
+                self._execution_details = details
+
     def executionMessagesGet(self):
         '''Variety of details about the execution'''
         with self._execution_messages_lock:
             return self._execution_messages.copy()
 
     def executionMessagesAdd(self, messages, task = None):
-        '''Adds a new messages to the list'''
+        '''Adds new execution messages to the list'''
         if not isinstance(messages, list):
             messages = [messages]
         if not isinstance(task, str):
             task = self.name()
+        self.executionMessagesSet(self._execution_messages.get(task, []) + messages, task)
+
+    def executionMessagesSet(self, messages, task = None):
+        '''Set execution messages'''
         with self._execution_messages_lock:
-            self._execution_messages[task] = self._execution_messages.get(task, []) + messages
+            if task:
+                self._execution_messages[task] = messages
+            else:
+                self._execution_messages = messages
 
     def configsSet(self, configs):
         '''Set the defined configurations and skip not defined'''

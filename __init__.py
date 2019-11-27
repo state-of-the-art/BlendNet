@@ -327,7 +327,8 @@ class BlendNetTaskPreviewOperation(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return True
+        bn = context.window_manager.blendnet
+        return len(bn.manager_tasks) > bn.manager_tasks_idx
 
     def _findRenderResultArea(self, context):
         for window in context.window_manager.windows:
@@ -389,7 +390,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             return {'CANCELLED'}
 
         # Fix and verify the blendfile dependencies
-        if blend_file.getDependencies()[1]:
+        bads = blend_file.getDependencies()[1]
+        if bads:
             self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
             return {'CANCELLED'}
 
@@ -440,23 +442,27 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
 
         scene.frame_current = self._frame
 
-        fname = BlendNet.addon.passAlphanumString(bpy.path.basename(bpy.data.filepath)[:-6])
+        fname = bpy.path.basename(bpy.data.filepath)
         if not self._task_name:
             # If the operation is not completed - reuse the same task name
             d = datetime.utcnow().strftime('%y%m%d%H%M')
-            self._task_name = '%s-%s-%d-%s' % (fname, d, scene.frame_current, BlendNet.addon.genRandomString(3))
+            self._task_name = '%s-%s-%d-%s' % (
+                BlendNet.addon.passAlphanumString(fname[:-6]),
+                d, scene.frame_current,
+                BlendNet.addon.genRandomString(3)
+            )
 
             print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
 
             # Prepare list of files need to be uploaded
             base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
-            deps, bad = blend_file.getDependencies()
-            if bad:
+            deps, bads = blend_file.getDependencies()
+            if bads:
                 self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
                 return {'CANCELLED'}
 
             deps_map = dict([ (rel, os.path.join(base_dir, rel)) for rel in deps ])
-            deps_map[fname+'.blend'] = self._project_file
+            deps_map[fname] = self._project_file
 
             # Run the dependencies upload background process
             BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
@@ -486,7 +492,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         cfg = {
             'samples': samples,
             'frame': scene.frame_current,
-            'project': fname+'.blend',
+            'project': fname,
         }
 
         if not BlendNet.addon.managerTaskConfig(self._task_name, cfg):
@@ -528,6 +534,202 @@ class TASKS_UL_list(bpy.types.UIList):
         elif self.layout_type in {'GRID'}:
             pass
 
+class BlendNetTaskInfoOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskinfo'
+    bl_label = 'Task info'
+    bl_description = 'Show the current task info panel'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        return len(bn.manager_tasks) > bn.manager_tasks_idx
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        def drawPopup(self, context):
+            layout = self.layout
+            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+            data = BlendNet.addon.managerTaskStatus(task_name)
+            if not data:
+                return
+            keys = BlendNet.addon.naturalSort(data.keys())
+            for key in keys:
+                layout.label(text='%s: %s' % (key, data[key]))
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        wm.popup_menu(drawPopup, title='Task info for "%s"' % task_name, icon='INFO')
+
+        return {'FINISHED'}
+
+class BlendNetTaskMessagesOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskmessages'
+    bl_label = 'Export task messages'
+    bl_description = 'Export the task execution messages'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        task_state = bn.manager_tasks[bn.manager_tasks_idx].state
+        return task_state not in {'CREATED', 'PENDING'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        def drawPopupOk(self, context):
+            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+            self.layout.label(text='Task messages exported to %s.%s.messages.txt' % (bpy.data.filepath, task_name))
+
+        def drawPopupNo(self, context):
+            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+            self.layout.label(text='No task messages available for export' % (bpy.data.filepath, task_name))
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+
+        data = BlendNet.addon.managerTaskMessages(task_name)
+        if data:
+            keys = BlendNet.addon.naturalSort(data.keys())
+            with open('%s.%s.messages.txt' % (bpy.data.filepath, task_name), 'w') as f:
+                for key in keys:
+                    f.write('%s%s' % (key, os.linesep))
+                    for line in data[key]:
+                        f.write('\t%s%s' % (line, os.linesep))
+
+        wm.popup_menu(drawPopupOk if data else drawPopupNo, title='Task messages for "%s"' % task_name, icon='TEXT')
+
+        return {'FINISHED'}
+
+class BlendNetTaskDetailsOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskdetails'
+    bl_label = 'Export task details'
+    bl_description = 'Export the task execution details'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        task_state = bn.manager_tasks[bn.manager_tasks_idx].state
+        return task_state not in {'CREATED', 'PENDING'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        def drawPopupOk(self, context):
+            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+            self.layout.label(text='Task details exported to %s.%s.details.txt' % (bpy.data.filepath, task_name))
+
+        def drawPopupNo(self, context):
+            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+            self.layout.label(text='No task details available for export' % (bpy.data.filepath, task_name))
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+
+        data = BlendNet.addon.managerTaskDetails(task_name)
+        if data:
+            keys = BlendNet.addon.naturalSort(data.keys())
+            with open('%s.%s.details.txt' % (bpy.data.filepath, task_name), 'w') as f:
+                for key in keys:
+                    f.write('%s%s' % (key, os.linesep))
+                    for line in data[key]:
+                        f.write('\t%s%s' % (line, os.linesep))
+
+        wm.popup_menu(drawPopupOk if data else drawPopupNo, title='Task details for "%s"' % task_name, icon='TEXT')
+
+        return {'FINISHED'}
+
+class BlendNetTaskStartOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskstart'
+    bl_label = 'Task start'
+    bl_description = 'Start the stopped or created task'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        task_state = bn.manager_tasks[bn.manager_tasks_idx].state
+        return task_state in {'CREATED', 'STOPPED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        BlendNet.addon.managerTaskRun(task_name)
+
+        return {'FINISHED'}
+
+class BlendNetTaskStopOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskstop'
+    bl_label = 'Task stop'
+    bl_description = 'Stop the pending or running task'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        task_state = bn.manager_tasks[bn.manager_tasks_idx].state
+        return task_state in {'PENDING', 'RUNNING'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        BlendNet.addon.managerTaskStop(task_name)
+
+        return {'FINISHED'}
+
+class BlendNetTaskRemoveOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskremove'
+    bl_label = 'Task remove'
+    bl_description = 'Remove the task from the tasks list'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        return len(bn.manager_tasks) > bn.manager_tasks_idx
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        # TODO: ARE YOU SURE popup
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        BlendNet.addon.managerTaskRemove(task_name)
+
+        return {'FINISHED'}
+
+
+class BlendNetTaskMenu(bpy.types.Menu):
+    bl_idname = 'RENDER_MT_blendnet_task_menu'
+    bl_label = 'Task Menu'
+    bl_description = 'Allow to operate on tasks in the list'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        return len(bn.manager_tasks) > bn.manager_tasks_idx
+
+    def draw(self, context):
+        layout = self.layout
+        wm = context.window_manager
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+
+        layout.label(text='Task "%s":' % task_name)
+        layout.operator('blendnet.taskinfo', icon='INFO')
+        layout.operator('blendnet.taskmessages', icon='TEXT')
+        layout.operator('blendnet.taskdetails', icon='TEXT')
+        layout.operator('blendnet.taskstart', icon='PLAY')
+        layout.operator('blendnet.taskremove', icon='TRASH')
+        layout.operator('blendnet.taskstop', icon='PAUSE')
+        layout.label(text='All tasks actions:')
+        layout.operator('blendnet.taskstoprunning', text='Stop all running tasks', icon='PAUSE')
+        layout.operator('blendnet.taskremovestopped', text='Remove all stopped tasks', icon='TRASH')
+
 class BlendNetRenderPanel(bpy.types.Panel):
     bl_idname = 'RENDER_PT_blendnet_render'
     bl_label = 'BlendNet'
@@ -539,24 +741,26 @@ class BlendNetRenderPanel(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         # Allow to see the tasks if selected blendnet and support cycles
-        return bpy.context.scene.render.engine in ('CYCLES', __package__)
+        return context.scene.render.engine in ('CYCLES', __package__)
 
     def draw(self, context):
         layout = self.layout
         wm = context.window_manager
-        prefs = bpy.context.preferences.addons[__package__].preferences
+        prefs = context.preferences.addons[__package__].preferences
 
         box = layout.box()
         row = box.row()
         row.label(text='BlendNet Render')
         row.label(text=context.window_manager.blendnet.status)
-        if bpy.context.scene.render.engine != __package__:
+        if context.scene.render.engine != __package__:
             row = box.row(align=True)
             row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
             row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
         if BlendNet.addon.isManagerActive():
             box.template_list('TASKS_UL_list', '', wm.blendnet, 'manager_tasks', wm.blendnet, 'manager_tasks_idx', rows=1)
-            box.operator('blendnet.taskpreview', text='Task Preview', icon='RENDER_STILL')
+            split = box.split(factor=0.8)
+            split.operator('blendnet.taskpreview', text='Task Preview', icon='RENDER_RESULT')
+            split.menu('RENDER_MT_blendnet_task_menu', text='Actions')
 
 class BlendNetManagerPanel(bpy.types.Panel):
     bl_idname = 'RENDER_PT_blendnet_manager'
@@ -783,6 +987,13 @@ def register():
     bpy.utils.register_class(BlendNetRenderEngine)
     bpy.utils.register_class(BlendNetRunTaskOperation)
     bpy.utils.register_class(BlendNetTaskPreviewOperation)
+    bpy.utils.register_class(BlendNetTaskInfoOperation)
+    bpy.utils.register_class(BlendNetTaskMessagesOperation)
+    bpy.utils.register_class(BlendNetTaskDetailsOperation)
+    bpy.utils.register_class(BlendNetTaskStartOperation)
+    bpy.utils.register_class(BlendNetTaskStopOperation)
+    bpy.utils.register_class(BlendNetTaskRemoveOperation)
+    bpy.utils.register_class(BlendNetTaskMenu)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
     bpy.utils.register_class(BlendNetManagerPanel)
@@ -793,6 +1004,13 @@ def unregister():
     bpy.utils.unregister_class(BlendNetManagerPanel)
     bpy.utils.unregister_class(BlendNetToggleManager)
     bpy.utils.unregister_class(BlendNetRenderPanel)
+    bpy.utils.unregister_class(BlendNetTaskMenu)
+    bpy.utils.unregister_class(BlendNetTaskInfoOperation)
+    bpy.utils.unregister_class(BlendNetTaskRemoveOperation)
+    bpy.utils.unregister_class(BlendNetTaskStopOperation)
+    bpy.utils.unregister_class(BlendNetTaskStartOperation)
+    bpy.utils.unregister_class(BlendNetTaskDetailsOperation)
+    bpy.utils.unregister_class(BlendNetTaskMessagesOperation)
     bpy.utils.unregister_class(BlendNetTaskPreviewOperation)
     bpy.utils.unregister_class(BlendNetRunTaskOperation)
     bpy.utils.unregister_class(BlendNetRenderEngine)

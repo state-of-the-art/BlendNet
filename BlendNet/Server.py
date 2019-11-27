@@ -216,3 +216,26 @@ class Processor(SimpleREST.ProcessorBase):
         return { 'success': True, 'message': 'Got task execution messages',
             'data': self._e.taskGet(parts[0]).executionMessagesGet()
         }
+
+    @SimpleREST.get('task/*/stop')
+    def task_stop(self, req, parts):
+        '''Stop the task execution'''
+        if not self._e.taskExists(parts[0]):
+            return { 'success': False, 'message': 'Unable to find task' }
+
+        return { 'success': True, 'message': 'Task stopped',
+            'data': self._e.taskGet(parts[0]).stop()
+        }
+
+    @SimpleREST.delete('task/*')
+    def task_remove(self, req, parts):
+        '''Remove not running task from the task list'''
+        if not self._e.taskExists(parts[0]):
+            return { 'success': False, 'message': 'Unable to find task' }
+
+        if self._e.taskGet(parts[0]).isRunning():
+            return { 'success': False, 'message': 'Unable to remove the running task' }
+
+        return { 'success': True, 'message': 'Task removed',
+            'data': self._e.taskRemove(parts[0])
+        }
