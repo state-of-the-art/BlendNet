@@ -45,9 +45,29 @@ class Client:
         '''Run the prepared task'''
         return self._engine.get('task/%s/run' % task)
 
+    def taskInfo(self, task):
+        '''Return the task current info'''
+        return self._engine.get('task/%s' % task)
+
     def taskStatus(self, task):
         '''Return the task current status'''
         return self._engine.get('task/%s/status' % task)
+
+    def taskMessages(self, task):
+        '''Return the task execution messages'''
+        return self._engine.get('task/%s/messages' % task)
+
+    def taskDetails(self, task):
+        '''Return the task execution details'''
+        return self._engine.get('task/%s/details' % task)
+
+    def taskStop(self, task):
+        '''Stop the task execution'''
+        return self._engine.get('task/%s/stop' % task)
+
+    def taskRemove(self, task):
+        '''Remove the task from the manager'''
+        return self._engine.delete('task/%s' % task)
 
     def taskResultDownloadStream(self, task, result, stream_func):
         '''Will download result name (preview/render) into the function-processor of stream'''
@@ -78,13 +98,13 @@ class ClientEngine:
         self._context.load_verify_locations(cadata=self._ca.decode())
         return True
 
-    def _request(self, path, data = None):
+    def _request(self, path, data = None, method = 'GET'):
         '''Creates request to execute'''
         if not self._getCA() or not self._address:
             return None
 
         url = 'https://%s:%d/api/v1/%s' % (self._address, self._cfg['listen_port'], path)
-        req = urllib.request.Request(url, data=data, method='PUT' if data else 'GET')
+        req = urllib.request.Request(url, data=data, method=method)
 
         creds = '%s:%s' % (self._cfg['auth_user'], self._cfg['auth_password'])
         if creds != ':':
@@ -165,8 +185,16 @@ class ClientEngine:
 
         return self._requestExecute(req, self._requestExecuteRun)
 
+    def delete(self, path):
+        req = self._request(path, None, 'DELETE')
+
+        if not req:
+            return None
+
+        return self._requestExecute(req, self._requestExecuteRun)
+
     def put(self, path, stream, size, checksum = None):
-        req = self._request(path, stream)
+        req = self._request(path, stream, 'PUT')
 
         req.add_header('Content-Length', str(size))
         req.add_header('Content-Type', 'application/octet-stream')

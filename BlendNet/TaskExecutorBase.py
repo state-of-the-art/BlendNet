@@ -117,11 +117,31 @@ class TaskExecutorBase(ABC):
                 self._tasks[name] = self._task_type(self, name)
             return self._tasks[name]
 
-    def taskToPending(self, task):
-        '''Put task object into pending list'''
+    def taskRemove(self, name):
+        '''Removes task from the task list'''
+        task = self.taskGet(name)
+        if task.isRunning():
+            task.stop()
+        if task.isPending():
+            self.taskRemoveFromPending(task)
+        with self._tasks_lock:
+            self._tasks.pop(name)
+
+    def taskAddToPending(self, task):
+        '''Put task object into the pending list'''
         with self._tasks_pending_lock:
+            task.statePending()
             self._tasks_pending.append(task)
-        print('DEBUG: Moving new task to pending: "%s"' % task.name())
+        print('DEBUG: Moved task to pending: "%s"' % task.name())
+
+        return True
+
+    def taskRemoveFromPending(self, task):
+        '''Remove task object from the pending list'''
+        with self._tasks_pending_lock:
+            task.stateCreated()
+            self._tasks_pending.remove(task)
+        print('DEBUG: Removed task from pending: "%s"' % task.name())
 
         return True
 
@@ -148,7 +168,7 @@ class TaskExecutorBase(ABC):
                 tasks_running = self._tasks_running.copy()
                 for task in tasks_running:
                     if task.isEnded(): # Remove task from the list since it's ended
-                        print('DEBUG: Removing ended task "%s"' % task.name())
+                        print('DEBUG: Removing from running list ended task "%s"' % task.name())
                         self._tasks_running.remove(task)
 
             if self._tasks_pending:

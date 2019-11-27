@@ -81,7 +81,7 @@ def getConfig():
 
     return cfg
 
-def _naturalSort(lst):
+def naturalSort(lst):
     import re
     def atoi(text):
         return int(text) if text.isdigit() else text
@@ -142,7 +142,7 @@ def fillAvailableInstanceTypes(scene, context):
         result = providers.getInstanceTypes()
 
         if available_instance_types_cache[1] == provider:
-            keys = _naturalSort(result.keys())
+            keys = naturalSort(result.keys())
             out = []
             for key in keys:
                 out.append( (key, key, result[key]) )
@@ -245,7 +245,7 @@ def updateManagerTasks():
 
     fresh_tasks_ids = set(tasks.keys())
     cached_tasks_ids = set(manager_tasks_cache.keys())
-    
+
     to_add = fresh_tasks_ids.difference(cached_tasks_ids)
     to_rem = cached_tasks_ids.difference(fresh_tasks_ids)
     for name in to_add:
@@ -386,6 +386,18 @@ def managerTaskRun(task):
 
 def managerTaskStatus(task):
     return ManagerClient(getManagerIP(), getConfig()).taskStatus(task)
+
+def managerTaskMessages(task):
+    return ManagerClient(getManagerIP(), getConfig()).taskMessages(task)
+
+def managerTaskDetails(task):
+    return ManagerClient(getManagerIP(), getConfig()).taskDetails(task)
+
+def managerTaskStop(task):
+    return ManagerClient(getManagerIP(), getConfig()).taskStop(task)
+
+def managerTaskRemove(task):
+    return ManagerClient(getManagerIP(), getConfig()).taskRemove(task)
 
 def managerTaskResultDownload(task, result, file_path):
     return ManagerClient(getManagerIP(), getConfig()).taskResultDownload(task, result, file_path)

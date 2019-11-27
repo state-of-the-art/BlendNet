@@ -69,9 +69,13 @@ class FileCache:
                     if not (entry.is_file() and entry.name.endswith('.json')):
                         continue
                     info = entry.name.split('.')
-                    with open(os.path.join(bd, entry.name), 'r') as f:
-                        with self._blobs_map_lock:
-                            self._blobs_map[info[0]] = json.load(f)
+                    json_path = os.path.join(bd, entry.name)
+                    try:
+                        with open(json_path, 'r') as f:
+                            with self._blobs_map_lock:
+                                self._blobs_map[info[0]] = json.load(f)
+                    except:
+                        print('ERROR: Unable to parse metadata from disk: %s' % json_path)
 
         with self._blobs_map_lock:
             print('INFO: Found %i blobs in cache' % len(self._blobs_map))

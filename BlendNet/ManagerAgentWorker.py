@@ -167,6 +167,9 @@ class ManagerAgentWorker:
         with self._state_lock:
             return self._state
 
+    def isActive(self):
+        return self.state() == ManagerAgentState.ACTIVE
+
     def _stateWatcher(self):
         '''Watch on the agent state'''
         print('DEBUG: Starting agent state watcher %s' % self._name)
@@ -312,6 +315,21 @@ class ManagerAgentWorker:
         '''Requesting the task status from agent'''
         if self._client:
             return self._client.taskStatus(task_name)
+
+    def taskMessages(self, task_name):
+        '''Requesting the task messages from agent'''
+        if self._client:
+            return self._client.taskMessages(task_name)
+
+    def taskDetails(self, task_name):
+        '''Requesting the task details from agent'''
+        if self._client:
+            return self._client.taskDetails(task_name)
+
+    def taskStop(self, task_name):
+        '''Stopping the task activity on the agent'''
+        if self._client:
+            return self._client.taskStop(task_name)
 
     def requestPreviewDownload(self, task_name, callback):
         '''Put new request to download a current preview image from the agent task'''

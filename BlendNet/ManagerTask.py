@@ -39,6 +39,8 @@ class ManagerTask(TaskBase):
 
         # Task executions by agents
         self._executions = {}
+        # Info about the execution statuses used in the execution watcher
+        self._execution_status = {}
 
         # Task execution results and processor
         self._results_preview_lock = threading.Lock()
@@ -49,6 +51,8 @@ class ManagerTask(TaskBase):
 
         self._results_to_remove_lock = threading.Lock()
         self._results_to_remove = set()
+
+        self._stop_task = False # Used to stop the task
 
     def statusResultsProcessingSet(self, val):
         with self._status_lock:
@@ -110,6 +114,9 @@ class ManagerTask(TaskBase):
 
             # Clean the old result blobs
             with self._results_to_remove_lock:
+                if not self._results_to_remove:
+                    continue
+                print('DEBUG: Running cleaning of %s result blobs' % len(self._results_to_remove))
                 for blob_id in self._results_to_remove:
                     self._parent._fc.blobRemove(blob_id)
                 self._results_to_remove.clear()
@@ -129,6 +136,9 @@ class ManagerTask(TaskBase):
     def acquireWorkload(self, agent):
         '''Returns map with parameters for agent to process'''
         with self._status_lock:
+            if self._stop_task or not self.isRunning():
+                return {} # Stopping in progress - no more workloads
+
             left_to_acquire = self._cfg.samples - self._status['samples_acquired']
 
             # "<=" just in case when more samples was calculated to prevent endless task
@@ -145,11 +155,13 @@ class ManagerTask(TaskBase):
             self._status['samples_acquired'] += workload['samples']
             # Append to seed to make agent render unique
             workload['seed'] += self._status['workloads_taken']
-            workload['task_name'] = '%s_%d' % (self._name, self._status['workloads_taken'])
+            workload['task_name'] = '%s_%d' % (self.name(), self._status['workloads_taken'])
 
             # Put agent task into executions list
             with self._execution_lock:
                 self._executions[workload['task_name']] = agent
+
+            print('DEBUG: Workload for Agent %s acquired: %s' % (agent._name, workload))
 
             self._status['workloads_taken'] += 1
 
@@ -169,6 +181,7 @@ class ManagerTask(TaskBase):
             self._results_preview[agent_task] = blob_id
         if old_blob_id:
             with self._results_to_remove_lock:
+                print('DEBUG: Adding to remove list preview: %s' % old_blob_id)
                 self._results_to_remove.add(old_blob_id)
 
     def updateRender(self, agent_task, blob_id):
@@ -191,24 +204,43 @@ class ManagerTask(TaskBase):
             self._results_watcher = threading.Thread(target=self._resultsWatcher)
             self._results_watcher.start()
 
-        execution_status = {}
         task_end_states = (TaskState.STOPPED.name, TaskState.COMPLETED.name)
+        update_messages_time = 0
 
         while self.isRunning():
+            if self._parent.isTerminating():
+                self.stop()
             with self._execution_lock:
                 executions = self._executions.copy()
 
             for task_name, agent in executions.items():
-                prev_status = execution_status.get(task_name, {})
+                prev_status = self._execution_status.get(task_name, {})
+                task_status = prev_status.copy()
                 if prev_status.get('state') in task_end_states:
                     continue
 
-                requested_time = time.time()
-                task_status = agent.taskStatus(task_name)
-                if not task_status:
-                    continue
+                if agent.isActive():
+                    requested_time = time.time()
+                    task_status = agent.taskStatus(task_name)
+                    if not task_status:
+                        continue
+                    task_status['_requested_time'] = requested_time # Will help with remaining calculations
+                else:
+                    # If it was not active before - just wait
+                    if not prev_status:
+                        continue
+                    # If it was active - looks like the agent failed and we have to mark task as stopped
+                    print('WARN: The agent become not active - invalidating its task')
+                    agent.taskStop(task_name) # Try to stop the task on the agent anyway
+                    task_status['state'] = TaskState.STOPPED.name
 
-                task_status['_requested_time'] = requested_time # Will help with remaining calculations
+                if self._stop_task and task_status.get('state') not in task_end_states:
+                    print('DEBUG: stopping Agent task %s' % task_name)
+                    agent.taskStop(task_name)
+
+                # Update task messages once per 10 sec
+                if update_messages_time + 10 < time.time():
+                    self.executionMessagesSet(agent.taskMessages(task_name).get(task_name), task_name)
 
                 param = 'preview'
                 if prev_status.get('result', {}).get(param) != task_status.get('result', {}).get(param):
@@ -231,12 +263,13 @@ class ManagerTask(TaskBase):
 
                     if task_status.get('state') == TaskState.STOPPED.name:
                         print('WARN: The agent task %s was stopped' % task_name)
-                        return_samples = task_status.get('samples', agent.work()['samples'])
+                        return_samples = task_status.get('samples', agent.work().get('samples'))
                         # Main task output is render - so if it's exists, we can think that some work was done
                         if task_status.get('result', {}).get('render'):
                             # If agent was able to complete some work - return the rest back to task
                             if task_status.get('samples_done'):
                                 return_samples -= task_status['samples_done']
+                        print('DEBUG: Agent %s returning samples to render: %s %s' % (agent._name, return_samples, task_status))
                         self.returnAcquiredWorkload(return_samples)
                         agent.workEnded()
 
@@ -244,16 +277,23 @@ class ManagerTask(TaskBase):
                         print('INFO: The agent task %s was completed' % task_name)
                         agent.workEnded()
 
-                execution_status[task_name] = task_status
+                    if task_status.get('state') in task_end_states:
+                        print('DEBUG: Retreive details about the task %s execution' % task_name)
+                        self.executionDetailsSet(agent.taskDetails(task_name).get(task_name), task_name)
+
+                self._execution_status[task_name] = task_status
+
+            if update_messages_time + 10 < time.time():
+                update_messages_time = time.time()
 
             # Updating the task left samples
-            self.statusSamplesDoneSet(sum([ t.get('samples_done') for t in execution_status.values() ]))
+            self.statusSamplesDoneSet(sum([ t.get('samples_done') for t in self._execution_status.values() ]))
 
             # Calculate the task remaining
             # TODO: prepare fixes - right now it's not good at all
             time_per_sample = []
             min_start_time = time.time()
-            for task, status in execution_status.items():
+            for task, status in self._execution_status.items():
                 if not (status.get('start_time') and status.get('samples')):
                     continue
                 min_start_time = min(min_start_time, status['start_time'])
@@ -269,16 +309,24 @@ class ManagerTask(TaskBase):
 
             # Check if all the samples was processed and tasks completed
             with self._status_lock:
-                if self._status['samples_done'] == self._cfg.samples \
-                        and not self._status['results_processing'] \
-                        and all([ execution_status[task].get('state') in task_end_states for task in execution_status ]):
-                    print('INFO: Task %s is completed' % self.name())
-                    self.stateComplete()
-                    continue
+                if not self._status['results_processing'] \
+                        and all([ self._execution_status[task].get('state') in task_end_states for task in self._execution_status ]):
+                    if self._stop_task:
+                        print('INFO: Task %s is stopped' % self.name())
+                        self.stateStop()
+                        self._stop_task = False
+                        continue
+                    if self._status['samples_done'] == self._cfg.samples:
+                        print('INFO: Task %s is completed' % self.name())
+                        self.stateComplete()
+                        continue
 
             time.sleep(1.0)
 
         with self._state_lock:
-            print('DEBUG: Execution watcher of task "%s" is stopped with state %s' % (self.name(), self._state.name))
+            print('DEBUG: Execution watcher of task "%s" is ended with state %s' % (self.name(), self._state.name))
         with self._execution_lock:
             self._execution_watcher = None
+
+    def _stop(self):
+        self._stop_task = True
