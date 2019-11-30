@@ -320,11 +320,13 @@ class ManagerAgentWorker:
         '''Requesting the task messages from agent'''
         if self._client:
             return self._client.taskMessages(task_name)
+        return {}
 
     def taskDetails(self, task_name):
         '''Requesting the task details from agent'''
         if self._client:
             return self._client.taskDetails(task_name)
+        return {}
 
     def taskStop(self, task_name):
         '''Stopping the task activity on the agent'''

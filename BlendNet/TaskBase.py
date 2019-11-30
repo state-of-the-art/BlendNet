@@ -53,7 +53,7 @@ class TaskState(Enum):
 class TaskBase(ABC):
     '''Class with the common task functional'''
 
-    def __init__(self, parent, name, config):
+    def __init__(self, parent, name, config, data = {}):
         print('DEBUG: Creating new task %s' % name)
         if not isinstance(config, TaskConfig):
             raise Exception('Unable to set task with configuration %s' % type(config))
@@ -62,33 +62,39 @@ class TaskBase(ABC):
         self._cfg = config
 
         self._name = name
-        self._create_time = int(time.time())
-        self._start_time = None
-        self._end_time = None
+        self._create_time = data.get('create_time', int(time.time()))
+        self._start_time = data.get('start_time')
+        self._end_time = data.get('end_time')
 
         self._status_lock = threading.Lock()
-        self._status = {
+        self._status = data.get('status', {
             'samples_done': 0, # How much samples is processed
             'remaining': None, # Estimated time to complete the task
             'result': {
                 'preview': None, # Blob ID of the preview exr image
                 'render': None, # Blob ID of the render image
             },
-        }
+        })
 
+        # Task can't be in RUNNING state during creation
         self._state_lock = threading.Lock()
-        self._state = TaskState.CREATED
+        state_name = data.get('state', TaskState.CREATED.name)
+        self._state = TaskState[state_name] if state_name != TaskState.RUNNING.name else TaskState.STOPPED
 
         self._execution_lock = threading.Lock()
         self._execution_watcher = None
 
         self._execution_details_lock = threading.Lock()
-        self._execution_details = {}
+        self._execution_details = data.get('execution_details', {})
         self._execution_messages_lock = threading.Lock()
-        self._execution_messages = {}
+        self._execution_messages = data.get('execution_messages', {})
 
         self._files_lock = threading.Lock()
-        self._files = {}
+        self._files = data.get('files', {})
+
+        # Configuring here because configs using some internal task structures
+        if 'config' in data:
+            self._cfg.configsSet(data['config'])
 
     def __del__(self):
         print('DEBUG: Deleting task %s' % self.name())
@@ -96,6 +102,22 @@ class TaskBase(ABC):
 
     def name(self):
         return self._name
+
+    def snapshot(self):
+        '''Returns dict with all the data about task to restore it later'''
+        out = {
+            'config': self._cfg.configsGet(),
+            'status': self._status.copy(),
+            'name': self._name,
+            'create_time': self._create_time,
+            'start_time': self._start_time,
+            'end_time': self._end_time,
+            'state': self._state.name,
+            'execution_details': self._execution_details.copy(),
+            'execution_messages': self._execution_messages.copy(),
+            'files': self._files.copy(),
+        }
+        return out
 
     def info(self):
         '''Returns info about the task'''
@@ -172,12 +194,12 @@ class TaskBase(ABC):
     def stateCreated(self):
         with self._state_lock:
             if self._state == TaskState.PENDING:
-                self._state = TaskState.CREATED
+                self.stateSet(TaskState.CREATED)
 
     def statePending(self):
         with self._state_lock:
             if self._state in (TaskState.CREATED, TaskState.STOPPED):
-                self._state = TaskState.PENDING
+                self.stateSet(TaskState.PENDING)
 
     def stateStop(self):
         with self._state_lock:
@@ -185,7 +207,7 @@ class TaskBase(ABC):
             if self._state != TaskState.COMPLETED:
                 if self._state == TaskState.RUNNING:
                     self._end_time = int(time.time())
-                self._state = TaskState.STOPPED
+                self.stateSet(TaskState.STOPPED)
 
     def stateComplete(self):
         with self._state_lock:
@@ -193,7 +215,11 @@ class TaskBase(ABC):
             if self._state != TaskState.STOPPED:
                 if self._state == TaskState.RUNNING:
                     self._end_time = int(time.time())
-                self._state = TaskState.COMPLETED
+                self.stateSet(TaskState.COMPLETED)
+
+    def stateSet(self, state):
+        '''Unify state set of the task'''
+        self._state = state
 
     def fileAdd(self, path, file_id):
         '''Add file to the files map'''
@@ -247,7 +273,7 @@ class TaskBase(ABC):
     def stop(self):
         '''Stop the task execution and collect results to maybe continue the task later'''
         if self.isPending():
-            self._parent.taskRemoveFromPending(self._name)
+            self._parent.taskRemoveFromPending(self)
         if self.isRunning():
             self._stop()
 
@@ -339,5 +365,5 @@ class TaskBase(ABC):
             cwd = workspace_path,
             stdin = subprocess.PIPE, # To send commands to the process
             stdout = subprocess.PIPE, # To get the current status of executing
-            stderr = subprocess.STDOUT,
+            stderr = subprocess.PIPE, # To get messages from the running python script
         )

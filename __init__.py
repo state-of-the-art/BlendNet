@@ -754,7 +754,7 @@ class BlendNetRenderPanel(bpy.types.Panel):
         row.label(text=context.window_manager.blendnet.status)
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
-            row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL')
+            row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL').is_animation = False
             row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
         if BlendNet.addon.isManagerActive():
             box.template_list('TASKS_UL_list', '', wm.blendnet, 'manager_tasks', wm.blendnet, 'manager_tasks_idx', rows=1)

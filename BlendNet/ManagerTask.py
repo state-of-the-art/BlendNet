@@ -25,34 +25,44 @@ class ManagerTaskConfig(TaskConfig):
         super().__init__(parent)
 
 class ManagerTask(TaskBase):
-    def __init__(self, manager, name):
-        super().__init__(manager, name, ManagerTaskConfig(self))
+    def __init__(self, manager, name, data = {}):
+        super().__init__(manager, name, ManagerTaskConfig(self), data)
 
         with self._status_lock:
             self._status.update({
-                'start_time_actual': None, # Time of the first agent task started
-                'samples_per_workload': None, # How much samples manager give to one agent
-                'samples_acquired': 0, # How much samples was taken to process by agents
-                'workloads_taken': 0, # How much agent tasks was taken
-                'results_processing': None, # While results still processing task can't be completed
+                'start_time_actual': self._status.get('start_time_actual'), # Time of the first agent task started
+                'samples_per_workload': self._status.get('samples_per_workload'), # How much samples manager give to one agent
+                'samples_acquired': self._status.get('samples_acquired', 0), # How much samples was taken to process by agents
+                'workloads_taken': self._status.get('workloads_taken', 0), # How much agent tasks was taken
+                'results_processing': self._status.get('results_processing'), # While results still processing task can't be completed
             })
 
         # Task executions by agents
         self._executions = {}
         # Info about the execution statuses used in the execution watcher
-        self._execution_status = {}
+        self._execution_status = data.get('execution_status', {})
 
         # Task execution results and processor
         self._results_preview_lock = threading.Lock()
-        self._results_preview = {}
+        self._results_preview = data.get('results_preview', {})
         self._results_render_lock = threading.Lock()
-        self._results_render = {}
+        self._results_render = data.get('results_render', {})
         self._results_watcher = None
 
         self._results_to_remove_lock = threading.Lock()
         self._results_to_remove = set()
 
         self._stop_task = False # Used to stop the task
+
+    def snapshot(self):
+        '''Returns dict with all the data about task to restore it later'''
+        out = super().snapshot()
+        out.update({
+            'execution_status': self._execution_status.copy(),
+            'results_preview': self._results_preview.copy(),
+            'results_render': self._results_render.copy(),
+        })
+        return out
 
     def statusResultsProcessingSet(self, val):
         with self._status_lock:
@@ -161,8 +171,6 @@ class ManagerTask(TaskBase):
             with self._execution_lock:
                 self._executions[workload['task_name']] = agent
 
-            print('DEBUG: Workload for Agent %s acquired: %s' % (agent._name, workload))
-
             self._status['workloads_taken'] += 1
 
             return workload
@@ -178,10 +186,12 @@ class ManagerTask(TaskBase):
         old_blob_id = None
         with self._results_preview_lock:
             old_blob_id = self._results_preview.get(agent_task)
-            self._results_preview[agent_task] = blob_id
+            if blob_id == None:
+                self._results_preview.pop(agent_task)
+            else:
+                self._results_preview[agent_task] = blob_id
         if old_blob_id:
             with self._results_to_remove_lock:
-                print('DEBUG: Adding to remove list preview: %s' % old_blob_id)
                 self._results_to_remove.add(old_blob_id)
 
     def updateRender(self, agent_task, blob_id):
@@ -190,7 +200,10 @@ class ManagerTask(TaskBase):
         old_blob_id = None
         with self._results_render_lock:
             old_blob_id = self._results_render.get(agent_task)
-            self._results_render[agent_task] = blob_id
+            if blob_id == None:
+                self._results_render.pop(agent_task)
+            else:
+                self._results_render[agent_task] = blob_id
         if old_blob_id:
             with self._results_to_remove_lock:
                 self._results_to_remove.add(old_blob_id)
@@ -269,8 +282,16 @@ class ManagerTask(TaskBase):
                             # If agent was able to complete some work - return the rest back to task
                             if task_status.get('samples_done'):
                                 return_samples -= task_status['samples_done']
-                        print('DEBUG: Agent %s returning samples to render: %s %s' % (agent._name, return_samples, task_status))
-                        self.returnAcquiredWorkload(return_samples)
+                        else:
+                            # Making sure user will not see more samples than actually rendered
+                            task_status['samples_done'] = 0
+                            # Cleaning results of failed task
+                            self.updatePreview(task_name, None)
+                            self.updateRender(task_name, None)
+
+                        if return_samples > 0:
+                            print('DEBUG: Agent %s returning samples to render: %s' % (agent._name, return_samples))
+                            self.returnAcquiredWorkload(return_samples)
                         agent.workEnded()
 
                     if task_status.get('state') == TaskState.COMPLETED.name:
@@ -316,7 +337,8 @@ class ManagerTask(TaskBase):
                         self.stateStop()
                         self._stop_task = False
                         continue
-                    if self._status['samples_done'] == self._cfg.samples:
+                    # >= to make sure some calculate bug will not stop the completion of the task
+                    if self._status['samples_done'] >= self._cfg.samples:
                         print('INFO: Task %s is completed' % self.name())
                         self.stateComplete()
                         continue
@@ -330,3 +352,7 @@ class ManagerTask(TaskBase):
 
     def _stop(self):
         self._stop_task = True
+
+    def stateSet(self, state):
+        super().stateSet(state)
+        self._parent.tasksSave([self])

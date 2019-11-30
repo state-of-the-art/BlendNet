@@ -206,7 +206,7 @@ def createInstanceManager(instance_type, session_id, name):
 
     # TODO: make script overridable
     # TODO: a way to use custom url's to download the deps
-    blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
+    blender_sha256 = 'e201e7c3dd46aae4a464ec764190199b0ca9ff2e51f9883cd869a4539f33c592'
     blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
@@ -220,7 +220,7 @@ fi
 if [ ! -x /srv/blender/blender ]; then
     echo '--> Download & unpack blender'
     echo "{blender_sha256} -" > /tmp/blender.sha256
-    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256
+    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
     tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
 fi
@@ -243,6 +243,8 @@ Type=simple
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 Restart=always
 TimeoutStopSec=60
+StandardOutput=syslog
+StandardError=syslog
 
 [Install]
 WantedBy=multi-user.target
@@ -327,7 +329,7 @@ def createInstanceAgent(instance_type, session_id, name):
 
     # TODO: make script overridable
     # TODO: a way to use custom url's to download the deps
-    blender_sha256 = '7276216e95b28c74306cec21b6d61e202cbe14035a15a77dbc45fe9d98fca7aa'
+    blender_sha256 = 'e201e7c3dd46aae4a464ec764190199b0ca9ff2e51f9883cd869a4539f33c592'
     blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
@@ -341,7 +343,7 @@ fi
 if [ ! -x /srv/blender/blender ]; then
     echo '--> Download & unpack blender'
     echo "{blender_sha256} -" > /tmp/blender.sha256
-    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256
+    curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
     tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
 fi
@@ -363,6 +365,8 @@ Type=simple
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
 Restart=always
 TimeoutStopSec=20
+StandardOutput=syslog
+StandardError=syslog
 
 [Install]
 WantedBy=multi-user.target
