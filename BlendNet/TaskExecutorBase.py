@@ -9,7 +9,8 @@ import os
 import signal
 import time # We need to sleep the watching thread
 import threading # Sync between threads needed
-import json # Used in the tasks configuration
+import json # Used in the tasks save/load
+import hashlib # Calculate sha1 to find a task snapshot name
 from abc import ABC
 
 from .Config import Config
@@ -72,6 +73,8 @@ class TaskExecutorBase(ABC):
         self._tasks_lock = threading.Lock()
         self._tasks = {}
 
+        self._tasks_dir = os.path.join('tasks', '%s-%s' % (self.__class__.__name__, self._cfg.session_id))
+
         self._tasks_pending_lock = threading.Lock()
         self._tasks_pending = []
         self._tasks_running_lock = threading.Lock()
@@ -105,6 +108,45 @@ class TaskExecutorBase(ABC):
         with self._tasks_running_lock:
             return self._tasks_running.copy()
 
+    def tasksSave(self, tasks = []):
+        '''Save in-memory tasks to disk'''
+        with self._tasks_lock:
+            if not tasks:
+                tasks = list(self._tasks.values())
+
+            print('DEBUG: Saving %s tasks to disk' % len(tasks))
+
+            os.makedirs(self._tasks_dir, 0o700, True)
+
+            for task in tasks:
+                try:
+                    filename = 'task-%s.json' % hashlib.sha1(task.name().encode('utf-8')).hexdigest()
+                    with open(os.path.join(self._tasks_dir, filename), 'w') as f:
+                        json.dump(task.snapshot(), f)
+                except Exception as e:
+                    print('ERROR: Unable to save task "%s" to disk: %s' % (task.name(), e))
+
+    def tasksLoad(self):
+        '''Load tasks from disk'''
+        with self._tasks_lock:
+            if not os.path.isdir(self._tasks_dir):
+                return
+
+            with os.scandir(self._tasks_dir) as it:
+                for entry in it:
+                    if not (entry.is_file() and entry.name.endswith('.json')):
+                        continue
+                    json_path = os.path.join(self._tasks_dir, entry.name)
+                    try:
+                        with open(json_path, 'r') as f:
+                            data = json.load(f)
+                            task = self._task_type(self, data['name'], data)
+                            self._tasks[task.name()] = task
+                            if task.isPending():
+                                self.taskAddToPending(task)
+                    except Exception as e:
+                        print('ERROR: Unable to load task file "%s" from disk: %s' % (json_path, e))
+
     def taskExists(self, name):
         '''Will check the existance of task'''
         with self._tasks_lock:
@@ -126,6 +168,11 @@ class TaskExecutorBase(ABC):
             self.taskRemoveFromPending(task)
         with self._tasks_lock:
             self._tasks.pop(name)
+            # Remove the snapshot file if existing
+            filename = 'task-%s.json' % hashlib.sha1(name.encode('utf-8')).hexdigest()
+            filepath = os.path.join(self._tasks_dir, filename)
+            if not os.path.exists(filepath):
+                os.remove(filepath)
 
     def taskAddToPending(self, task):
         '''Put task object into the pending list'''

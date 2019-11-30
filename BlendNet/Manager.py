@@ -89,6 +89,17 @@ class Manager(providers.Manager, TaskExecutorBase):
         self._check_resources_timer = None
         self.resourcesGet(True)
 
+        self.tasksLoad()
+
+    def setTerminating(self):
+        '''Overrides setTerminating function to run save tasks'''
+        self.tasksSave()
+        providers.Manager.setTerminating(self)
+
+    def __del__(self):
+        TaskExecutorBase.__del__(self)
+        self.tasksSave()
+
     def _agentsPoolSetup(self):
         '''Setup the Agents pool'''
         name_template = self._cfg.agent_instance_prefix + '%04d'

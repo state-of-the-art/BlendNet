@@ -8,6 +8,7 @@ Description: Task used by Agent to control jobs
 import os
 import time
 import signal
+import threading # To run stderr reading thread
 
 from .TaskBase import TaskConfig, TaskBase
 
@@ -24,6 +25,9 @@ class AgentTask(TaskBase):
             self._status['result']['render_time'] = None
 
         self._stop_task = False
+
+        # Special thread to watch for stderr stream messages
+        self._execution_stderr_watcher = None
 
     def statusStatisticsSet(self, statistics):
         with self._status_lock:
@@ -44,6 +48,8 @@ class AgentTask(TaskBase):
         try:
             with self.prepareWorkspace() as ws_path:
                 process = self.runBlenderScriptProcessor(ws_path, 'render')
+                self._execution_stderr_watcher = threading.Thread(target=self._executionStderrWatcher, args=(process, ws_path))
+                self._execution_stderr_watcher.start()
                 self._watchBlenderScriptProcessor(process, ws_path)
         except Exception as e:
             print('ERROR: Exception occurred during task "%s" execution: %s' % (self.name(), e))
@@ -59,8 +65,25 @@ class AgentTask(TaskBase):
         with self._state_lock:
             print('DEBUG: Execution watcher of task "%s" is stopped with state %s' % (self.name(), self._state.name))
 
+    def _executionStderrWatcher(self, process, workspace):
+        '''Watching stderr to get response from the process script'''
+        print('INFO: Starting process stderr read')
+
+        for line in iter(process.stderr.readline, b''):
+            l = line.decode('utf-8').rstrip()
+            print(">err>> %s" % l)
+            self.executionMessagesAdd(l.strip())
+
+            # Saving the results
+            if l.startswith('INFO: Command "savePreview" completed'):
+                blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'preview.exr'))
+                self.statusPreviewSet(blob['id'] if blob else None)
+            elif l.startswith('INFO: Command "saveRender" completed'):
+                blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'render.exr'), True)
+                self.statusRenderSet(blob['id'] if blob else None)
+
     def _watchBlenderScriptProcessor(self, process, workspace):
-        '''Watching stdout and sending commands to the process'''
+        '''Watching blender stdout and sending commands to the process'''
         print('INFO: Starting process stdout read')
 
         prepare_time = None
@@ -75,10 +98,7 @@ class AgentTask(TaskBase):
         curr_sample = 0
         for line in iter(process.stdout.readline, b''):
             l = line.decode('utf-8').rstrip()
-            print(">>> %s" % l)
-
-            if l.startswith(('ERROR:', 'WARN:', 'INFO:')):
-                self.executionMessagesAdd(l.strip())
+            print(">std>> %s" % l)
 
             if l.startswith('Fra:'):
                 status = l.split(' | ')
@@ -159,15 +179,6 @@ class AgentTask(TaskBase):
                     self.statusRenderTimeSet(time_sec - prepare_time)
                     self.statusSamplesDoneSet(curr_sample)
 
-            # Saving the results
-            if curr_sample > 1:
-                if l.startswith('INFO: Command "savePreview" completed'):
-                    blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'preview.exr'))
-                    self.statusPreviewSet(blob['id'] if blob else None)
-                if l.startswith('INFO: Command "saveRender" completed'):
-                    blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'render.exr'), True)
-                    self.statusRenderSet(blob['id'] if blob else None)
-
             # Collecting the render statistics
             if l.startswith('Render statistics:'):
                 statistics = {}
@@ -175,7 +186,7 @@ class AgentTask(TaskBase):
                 header = None
                 for line in iter(process.stdout.readline, b''):
                     l = line.decode('utf-8').rstrip()
-                    print(">>> %s" % l)
+                    print(">std>> %s" % l)
 
                     if not l:
                         break

@@ -13,11 +13,14 @@ Description: Special script used by the agent to render the task
 # the main trick there - to call open file/render through queue
 # from the main thread, because blender hate threading.
 
-import signal # The other better ways are not working for subprocess...
-signal.signal(signal.SIGTERM, lambda s, f: print('WARN: Dodged TERM subprocess'))
-
 import os, sys, json
 sys.path.append(os.path.dirname(__file__))
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+import signal # The other better ways are not working for subprocess...
+signal.signal(signal.SIGTERM, lambda s, f: eprint('WARN: Dodged TERM subprocess'))
 
 import disable_buffering
 import blend_file
@@ -32,13 +35,13 @@ import threading # To run timer and flush render periodically
 
 import bpy
 
-print('INFO: Loading project file "%s"' % task['project'])
+eprint('INFO: Loading project file "%s"' % task['project'])
 bpy.ops.wm.open_mainfile(filepath=task['project'])
 
 scene = bpy.context.scene
 
 # Set some required variables
-print('INFO: Set scene vars')
+eprint('INFO: Set scene vars')
 scene.render.use_overwrite = True
 scene.render.use_compositing = False # Don't use because Composite layer impossible to merge
 scene.render.use_sequencer = False # No need for still images
@@ -52,13 +55,13 @@ scene.cycles.device = 'CPU' # The only one supported right now
 scene.cycles.use_square_samples = False
 
 # Set sampling
-print('INFO: Set sampling')
+eprint('INFO: Set sampling')
 if scene.cycles.progressive == 'PATH':
     scene.cycles.samples = task['samples']
 elif scene.cycles.progressive == 'BRANCHED_PATH':
     scene.cycles.aa_samples = task['samples']
 else:
-    print('ERROR: Unable to determine the sampling integrator')
+    eprint('ERROR: Unable to determine the sampling integrator')
     sys.exit(1)
 
 # Set task seed or use random one (because we need an unique render pattern)
@@ -68,7 +71,7 @@ scene.cycles.seed = task.get('seed', random.randrange(0, 2147483647))
 if 'frame' in task:
     scene.frame_current = task['frame']
 
-print('INFO: Disable denoising and use progressive refine')
+eprint('INFO: Disable denoising and use progressive refine')
 # TODO: Enable the required channels to apply denoise after merge
 bpy.context.view_layer.cycles['use_denoising'] = False
 scene.cycles.use_progressive_refine = True
@@ -79,7 +82,7 @@ try:
 except:
     pass
 
-print('INFO: Checking existance of the dependencies')
+eprint('INFO: Checking existance of the dependencies')
 blend_file.getDependencies()
 
 class Commands:
@@ -103,9 +106,9 @@ def executeCommand(name):
     func = getattr(Commands, name, None)
     if callable(func):
         func()
-        print('INFO: Command "%s" completed' % name)
+        eprint('INFO: Command "%s" completed' % name)
     else:
-        print('ERROR: Unable to execute "%s" command' % name)
+        eprint('ERROR: Unable to execute "%s" command' % name)
 
 def stdinProcess():
     '''Is used to get commands from the parent process'''
@@ -116,18 +119,18 @@ def stdinProcess():
                 break
             executeCommand(command)
         except Exception as e:
-            print('ERROR: Exception during processing stdin: %s' % e)
+            eprint('ERROR: Exception during processing stdin: %s' % e)
 
 input_thread = threading.Thread(target=stdinProcess)
 input_thread.start()
-print('INFO: Starting render process')
+eprint('INFO: Starting render process')
 
 # Start the render process
 bpy.ops.render.render()
 
-print('INFO: Render process completed')
+eprint('INFO: Render process completed')
 
 # Render complete - saving the result image
 executeCommand('saveRender')
 
-print('INFO: Save render completed')
+eprint('INFO: Save render completed')

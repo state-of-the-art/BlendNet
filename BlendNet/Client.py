@@ -55,11 +55,11 @@ class Client:
 
     def taskMessages(self, task):
         '''Return the task execution messages'''
-        return self._engine.get('task/%s/messages' % task)
+        return self._engine.get('task/%s/messages' % task) or {}
 
     def taskDetails(self, task):
         '''Return the task execution details'''
-        return self._engine.get('task/%s/details' % task)
+        return self._engine.get('task/%s/details' % task) or {}
 
     def taskStop(self, task):
         '''Stop the task execution'''

@@ -55,7 +55,7 @@ def getCaches():
             pcloc = None
             ext = None
 
-            if mod.type == 'FLUID_SIMULATION':
+            if mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
                 cachedir = os.path.realpath(bpy.path.abspath(mod.settings.filepath)).replace(localdir, '', 1)
                 if not os.path.isdir(os.path.join(localdir, cachedir)):
                     print('ERROR: Not a relative/not existing path of the cachedir "%s" for object modifier %s --> %s' % (mod.settings.filepath, o.name, mod.name))
@@ -106,7 +106,7 @@ def getCaches():
                 if not pc.use_disk_cache:
                     continue
 
-                if scene.frame_current not in range(pc.frame_start, pc.frame_end, pc.frame_step):
+                if scene.frame_current not in range(pc.frame_start, pc.frame_end+1, pc.frame_step):
                     continue
 
                 fname = pc.name if pc.name else ''.join([ hex(ord(c))[2:].zfill(2) for c in o.name ])
