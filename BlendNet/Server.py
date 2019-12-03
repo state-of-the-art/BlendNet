@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 '''BlendNet Server
 
-Description: Basic REST service for BlendNet task managers
+Description: Basic REST service for BlendNet task servers
 '''
 
 import os, sys
@@ -18,7 +18,7 @@ class Processor(SimpleREST.ProcessorBase):
 
     @SimpleREST.get()
     def info(self, req = None):
-        '''Return information about the manager's system'''
+        '''Return information about the server system'''
         import platform
 
         out = { 'success': True, 'data': {
@@ -49,7 +49,7 @@ class Processor(SimpleREST.ProcessorBase):
 
     @SimpleREST.get()
     def status(self, req = None):
-        '''Returns the current status of the manager'''
+        '''Returns the current status of the server'''
 
         return { 'success': True, 'data': {
             'load': self._e.getLoadStatus(),
@@ -61,7 +61,7 @@ class Processor(SimpleREST.ProcessorBase):
 
     @SimpleREST.get('task')
     def tasks(self, req):
-        '''Returns list of existing tasks on the manager'''
+        '''Returns list of existing tasks on the server'''
         tasks = dict([ (n, t.info()) for n, t in self._e.tasks().items() ])
         return { 'success': True, 'message': 'Got tasks info', 'data': tasks }
 

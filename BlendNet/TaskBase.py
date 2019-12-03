@@ -127,6 +127,7 @@ class TaskBase(ABC):
             'start_time': self._start_time,
             'end_time': self._end_time,
             'state': self._state.name,
+            'done': self._status['samples_done'] / self._cfg.samples,
         }
 
     def status(self):
