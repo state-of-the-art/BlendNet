@@ -94,6 +94,16 @@ class Manager(providers.Manager, TaskExecutorBase):
     def setTerminating(self):
         '''Overrides setTerminating function to run save tasks'''
         self.tasksSave()
+
+        # Let's delete the agents
+        with self._agents_pool_lock:
+            for agent in self._agents_pool:
+                print('WARN: Deleting the agent %s due to Manager termination' % agent._name)
+                # We don't need to wait until delete will be completed
+                thread = threading.Thread(target=providers.deleteInstance, args=(agent._name,))
+                thread.daemon = True
+                thread.start()
+
         providers.Manager.setTerminating(self)
 
     def __del__(self):
