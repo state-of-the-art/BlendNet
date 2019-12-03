@@ -3,8 +3,11 @@
 '''Blender Addon UI functions
 '''
 
+import os
+import bpy
 import time
 import threading
+import hashlib
 
 from . import providers
 from . import ManagerClient
@@ -251,18 +254,49 @@ def updateManagerTasks():
     for name in to_add:
         item = tasks_prop.add()
         item.name = tasks[name].get('name')
+
     for i, item in enumerate(tasks_prop):
-        name = item.name
-        if name in to_rem:
+        task_name = item.name
+        if task_name in to_rem:
             tasks_prop.remove(i)
             continue
-        if manager_tasks_cache.get(name) != tasks.get(name):
-            item.create_time = str(tasks[name].get('create_time'))
-            item.start_time = str(tasks[name].get('start_time'))
-            item.end_time = str(tasks[name].get('end_time'))
-            item.state = tasks[name].get('state')
-            done = tasks[name].get('done')
-            item.done = ('%.2f%%' % (done*100)) if done > 0.01 else None
+
+        task = tasks.get(task_name)
+        if not task:
+            continue
+        if manager_tasks_cache.get(task_name) != task:
+            item.create_time = str(task.get('create_time'))
+            item.start_time = str(task.get('start_time'))
+            item.end_time = str(task.get('end_time'))
+            item.state = task.get('state')
+            done = task.get('done')
+            item.done = ('%.2f%%' % (done*100)) if done > 0.01 else ''
+
+        if not item.received and task.get('state') == 'COMPLETED':
+            # TODO: make possible to use ### in the out path to save result using frame number
+            out_path = bpy.path.abspath(bpy.context.scene.render.filepath)
+            os.makedirs(out_path, 0o755, True)
+            out_file = os.path.join(out_path, '%s.exr' % task_name)
+            result = True
+            checksum = None
+            # Check the local file first - maybe it's the thing we need
+            if os.path.isfile(out_file):
+                # Calculate sha1 to make sure it's the same file
+                sha1_calc = hashlib.sha1()
+                with open(out_file, 'rb') as f:
+                    for chunk in iter(lambda: f.read(1048576), b''):
+                        sha1_calc.update(chunk)
+                checksum = sha1_calc.hexdigest()
+                # If file and checksum are here - we need to get the actual task status to compare
+                result = managerTaskStatus(task_name).get('result', {}).get('render')
+
+            # If file is not working for us - than download
+            if checksum != result:
+                print('INFO: Downloading the final render for %s...' % task_name)
+                item.received = 'Downloading...'
+                managerDownloadTaskResults(task_name, 'render', out_file)
+            else:
+                item.received = out_file
 
     manager_tasks_cache = tasks
 
@@ -379,6 +413,40 @@ def managerTaskUploadFilesStatus():
     if manager_task_upload_workers and manager_task_upload_workers.tasksLeft() > 0:
         return '%d left to upload...' % manager_task_upload_workers.tasksLeft()
     return None
+
+manager_task_download_workers = None
+
+def _managerDownloadTaskResultsWorker(task, result, file_path):
+    '''Gets item and downloads using client'''
+    ret = None
+    for repeat in range(0, 3):
+        ret = managerTaskResultDownload(task, result, file_path)
+        if ret:
+            break
+        print('WARN: Downloading of "%s" from task "%s" failed, repeating (%s)...' % (result, task, repeat))
+        time.sleep(1.0)
+    if ret:
+        print('DEBUG: Downloading of "%s" from task "%s" completed' % (result, task))
+        # Set the downloaded file path to the item received field
+    else:
+        file_path = 'Download error: %s' % ret
+    for item in bpy.context.window_manager.blendnet.manager_tasks:
+        if item.name == task:
+            item.received = file_path
+
+def managerDownloadTaskResults(task, result, path):
+    '''Multithreading results download'''
+
+    global manager_task_download_workers
+    if manager_task_download_workers == None:
+        manager_task_download_workers = Workers(
+            'Downloading files from Manager',
+            8,
+            _managerDownloadTaskResultsWorker,
+        )
+
+    manager_task_download_workers.add(task, result, path)
+    manager_task_download_workers.start()
 
 def managerTaskConfig(task, conf):
     return ManagerClient(getManagerIP(), getConfig()).taskConfigPut(task, conf)

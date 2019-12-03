@@ -24,7 +24,6 @@ else:
     from .BlendNet import blend_file
 
 import os
-import hashlib
 from datetime import datetime
 
 import bpy
@@ -213,6 +212,7 @@ class BlendNetManagerTask(bpy.types.PropertyGroup):
     end_time: StringProperty()
     state: StringProperty()
     done: StringProperty()
+    received: StringProperty()
 
 class BlendNetSessionProperties(bpy.types.PropertyGroup):
     original_render_engine: StringProperty(
@@ -912,35 +912,20 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                 ))
 
             update_render = None
-            out_path = bpy.path.abspath(scene.render.filepath)
-            os.makedirs(out_path, 0o755, True)
-            # TODO: make possible to use ### in the out path to save result using frame number
             if status.get('state') == 'COMPLETED':
                 if not loaded_final_render:
                     total_time = self.secToTime((status.get('end_time') or 0) - (status.get('start_time_actual') or 0))
-                    out_file = os.path.join(out_path, '%s.exr' % task_name)
-                    checksum = prev_status.get('result', {}).get('render')
-                    # Check the local file first - maybe it's the thing we need
+                    # File is downloaded in background by a separated thread
+                    out_file = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].received
                     if os.path.isfile(out_file):
-                        # Calculate sha1 to make sure it's the same file
-                        sha1_calc = hashlib.sha1()
-                        with open(out_file, 'rb') as f:
-                            for chunk in iter(lambda: f.read(1048576), b''):
-                                sha1_calc.update(chunk)
-                        if sha1_calc.hexdigest() == status.get('result', {}).get('render'):
-                            self.updateStats('Got the final render! | Total time: %s' % total_time)
-                            update_render = out_file
-                            checksum = sha1_calc.hexdigest()
-                            loaded_final_render = True
-
-                    # If file is not working for us - than download
-                    if checksum != status.get('result', {}).get('render'):
-                        self.updateStats('Downloading the final render...')
-                        BlendNet.addon.managerTaskResultDownload(task_name, 'render', out_file)
-                        self.updateStats('Got the final render! | Total time: %s' % total_time)
+                        self.updateStats('Got the final render! | Task render time: %s' % total_time)
                         update_render = out_file
                         loaded_final_render = True
+                    else:
+                        self.updateStats('%s | Task render time: %s' % (out_file, total_time))
+
             elif status.get('result', {}).get('preview') != prev_status.get('result', {}).get('preview'):
+                out_path = bpy.path.abspath(scene.render.filepath)
                 out_file = os.path.join(out_path, '%s-preview.exr' % task_name)
                 BlendNet.addon.managerTaskResultDownload(task_name, 'preview', out_file)
                 update_render = out_file
