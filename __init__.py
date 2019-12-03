@@ -212,6 +212,7 @@ class BlendNetManagerTask(bpy.types.PropertyGroup):
     start_time: StringProperty()
     end_time: StringProperty()
     state: StringProperty()
+    done: StringProperty()
 
 class BlendNetSessionProperties(bpy.types.PropertyGroup):
     original_render_engine: StringProperty(
@@ -530,7 +531,7 @@ class TASKS_UL_list(bpy.types.UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.7)
             split.label(text=item.name)
-            split.label(text=item.state)
+            split.label(text=('%s:%s' % (item.state[0], item.done)) if item.done and item.state != 'COMPLETED' else item.state)
         elif self.layout_type in {'GRID'}:
             pass
 

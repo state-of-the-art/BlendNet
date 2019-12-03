@@ -261,6 +261,8 @@ def updateManagerTasks():
             item.start_time = str(tasks[name].get('start_time'))
             item.end_time = str(tasks[name].get('end_time'))
             item.state = tasks[name].get('state')
+            done = tasks[name].get('done')
+            item.done = ('%.2f%%' % (done*100)) if done > 0.01 else None
 
     manager_tasks_cache = tasks
 
