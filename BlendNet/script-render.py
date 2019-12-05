@@ -71,9 +71,15 @@ scene.cycles.seed = task.get('seed', random.randrange(0, 2147483647))
 if 'frame' in task:
     scene.frame_current = task['frame']
 
-eprint('INFO: Disable denoising and use progressive refine')
-# TODO: Enable the required channels to apply denoise after merge
-bpy.context.view_layer.cycles['use_denoising'] = False
+if bpy.context.view_layer.cycles.use_denoising:
+    eprint('WARN: Disable denoising but enabling store denoise passes')
+    # We have to disable denoising, but ...
+    bpy.context.view_layer.cycles.use_denoising = False
+    # ... enabling storing of the denoising passes for future processing
+    # using _cycles.denoise() or composite denoise node
+    bpy.context.view_layer.cycles.denoising_store_passes = True
+
+eprint('INFO: Use progressive refine')
 scene.cycles.use_progressive_refine = True
 
 try:
