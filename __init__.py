@@ -24,6 +24,7 @@ else:
     from .BlendNet import blend_file
 
 import os
+import time
 from datetime import datetime
 
 import bpy
@@ -254,14 +255,16 @@ class BlendNetToggleManager(bpy.types.Operator):
     bl_label = ''
     bl_description = 'Start/Stop manager instance'
 
-    retry_counter = 50
+    retry_counter: IntProperty(default=50)
+
+    _timer = None
+    _last_run = 0
 
     @classmethod
     def poll(cls, context):
         return context.window_manager.blendnet.status == 'idle'
 
     def invoke(self, context, event):
-        BlendNetToggleManager.retry_counter = 50
         wm = context.window_manager
         BlendNet.addon.toggleManager()
 
@@ -275,25 +278,26 @@ class BlendNetToggleManager(bpy.types.Operator):
         if context.area:
             context.area.tag_redraw()
         wm.modal_handler_add(self)
-        self.timer = wm.event_timer_add(5.0, window=context.window)
+        self._timer = wm.event_timer_add(5.0, window=context.window)
 
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
-        if event.type != 'TIMER':
+        if event.type != 'TIMER' or self._last_run + 4.5 > time.time():
             return {'PASS_THROUGH'}
+
+        self._last_run = time.time()
 
         return self.execute(context)
 
     def execute(self, context):
         wm = context.window_manager
 
-        BlendNetToggleManager.retry_counter -= 1
-        if BlendNetToggleManager.retry_counter < 0:
+        self.retry_counter -= 1
+        if self.retry_counter < 0:
             self.report({'ERROR'}, 'BlendNet Manager operation reached maximum retries - something bad happened '
                                    'on "%s" stage. Please consult the documentation' % wm.blendnet.status)
             wm.blendnet.status = 'idle'
-            BlendNetToggleManager.retry_counter = 50
             return {'FINISHED'}
 
         if wm.blendnet.status == 'Manager starting...':
@@ -313,12 +317,11 @@ class BlendNetToggleManager(bpy.types.Operator):
                 return {'PASS_THROUGH'}
             self.report({'INFO'}, 'BlendNet Manager connected')
 
-        wm.event_timer_remove(self.timer)
+        wm.event_timer_remove(self._timer)
         wm.blendnet.status = 'idle'
         if context.area:
             context.area.tag_redraw()
 
-        BlendNetToggleManager.retry_counter = 50
         return {'FINISHED'}
 
 class BlendNetTaskPreviewOperation(bpy.types.Operator):
@@ -364,6 +367,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         description = 'Runs animation rendering instead of just a still image rendering',
         default = False
     )
+
+    _timer = None
 
     _project_file: None # temp blend project file to ensure it will not be changed
     _frame: 0 # current/start frame depends on animation
@@ -424,7 +429,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         self._task_name = None
 
         context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(0.1, window=context.window)
+        self._timer = context.window_manager.event_timer_add(0.1, window=context.window)
 
         return {'RUNNING_MODAL'}
 
@@ -469,8 +474,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
 
             # Slow down the check process
-            context.window_manager.event_timer_remove(self.timer)
-            self.timer = context.window_manager.event_timer_add(3.0, window=context.window)
+            context.window_manager.event_timer_remove(self._timer)
+            self._timer = context.window_manager.event_timer_add(3.0, window=context.window)
 
         status = BlendNet.addon.managerTaskUploadFilesStatus()
         if status:
@@ -522,12 +527,13 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         # Removing no more required temp blend file
         os.remove(self._project_file)
 
-        context.window_manager.event_timer_remove(self.timer)
+        context.window_manager.event_timer_remove(self._timer)
 
         return {'FINISHED'}
 
 class TASKS_UL_list(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        self.use_filter_sort_alpha = True
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             split = layout.split(factor=0.7)
             split.label(text=item.name)
@@ -683,26 +689,90 @@ class BlendNetTaskStopOperation(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BlendNetTasksStopStartedOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.tasksstopstarted'
+    bl_label = 'Stop all started tasks'
+    bl_description = 'Stop all the pending or running tasks'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    tasks: CollectionProperty(type=BlendNetManagerTask)
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        self.tasks.clear()
+        for task in wm.blendnet.manager_tasks:
+            if task.state in {'PENDING', 'RUNNING'}:
+                self.tasks.add().name = task.name
+        return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        self.report({'INFO'}, 'Stopping %s tasks' % len(self.tasks))
+        for task in self.tasks:
+            print('INFO: Stopping task "%s"' % task.name)
+            BlendNet.addon.managerTaskStop(task.name)
+        self.tasks.clear()
+
+        return {'FINISHED'}
+
 class BlendNetTaskRemoveOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskremove'
-    bl_label = 'Task remove'
+    bl_label = 'Remove selected task'
     bl_description = 'Remove the task from the tasks list'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    task_name: StringProperty()
 
     @classmethod
     def poll(cls, context):
         bn = context.window_manager.blendnet
-        return len(bn.manager_tasks) > bn.manager_tasks_idx
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        return bn.manager_tasks[bn.manager_tasks_idx].state in {'CREATED', 'STOPPED', 'COMPLETED'}
 
     def invoke(self, context, event):
         wm = context.window_manager
+        self.task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        return wm.invoke_confirm(self, event)
 
-        # TODO: ARE YOU SURE popup
-
-        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-        BlendNet.addon.managerTaskRemove(task_name)
+    def execute(self, context):
+        self.report({'INFO'}, 'Removing task "%s"' % self.task_name)
+        BlendNet.addon.managerTaskRemove(self.task_name)
 
         return {'FINISHED'}
 
+class BlendNetTasksRemoveEndedOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.tasksremoveended'
+    bl_label = 'Remove all ended tasks'
+    bl_description = 'Remove all the stopped or completed tasks'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    tasks: CollectionProperty(type=BlendNetManagerTask)
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        self.tasks.clear()
+        for task in wm.blendnet.manager_tasks:
+            if task.state in {'STOPPED', 'COMPLETED'}:
+                self.tasks.add().name = task.name
+
+        return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        self.report({'INFO'}, 'Removing %s tasks' % len(self.tasks))
+        for task in self.tasks:
+            print('INFO: Removing task "%s"' % task.name)
+            BlendNet.addon.managerTaskRemove(task.name)
+        self.tasks.clear()
+
+        return {'FINISHED'}
 
 class BlendNetTaskMenu(bpy.types.Menu):
     bl_idname = 'RENDER_MT_blendnet_task_menu'
@@ -728,8 +798,8 @@ class BlendNetTaskMenu(bpy.types.Menu):
         layout.operator('blendnet.taskremove', icon='TRASH')
         layout.operator('blendnet.taskstop', icon='PAUSE')
         layout.label(text='All tasks actions:')
-        layout.operator('blendnet.taskstoprunning', text='Stop all running tasks', icon='PAUSE')
-        layout.operator('blendnet.taskremovestopped', text='Remove all stopped tasks', icon='TRASH')
+        layout.operator('blendnet.tasksstopstarted', text='Stop all started tasks', icon='PAUSE')
+        layout.operator('blendnet.tasksremoveended', text='Remove all ended tasks', icon='TRASH')
 
 class BlendNetRenderPanel(bpy.types.Panel):
     bl_idname = 'RENDER_PT_blendnet_render'
@@ -860,7 +930,6 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
         return out
 
     def render(self, depsgraph):
-        import time
         scene = depsgraph.scene
         wm = bpy.context.window_manager
 
@@ -899,7 +968,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             status = BlendNet.addon.managerTaskStatus(task_name)
             if not status:
                 continue
-            
+
             self.updateStats(None, '%s: %s' % (task_name, status.get('state')))
 
             if status.get('state') == 'RUNNING':
@@ -978,7 +1047,9 @@ def register():
     bpy.utils.register_class(BlendNetTaskDetailsOperation)
     bpy.utils.register_class(BlendNetTaskStartOperation)
     bpy.utils.register_class(BlendNetTaskStopOperation)
+    bpy.utils.register_class(BlendNetTasksStopStartedOperation)
     bpy.utils.register_class(BlendNetTaskRemoveOperation)
+    bpy.utils.register_class(BlendNetTasksRemoveEndedOperation)
     bpy.utils.register_class(BlendNetTaskMenu)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
@@ -992,7 +1063,9 @@ def unregister():
     bpy.utils.unregister_class(BlendNetRenderPanel)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)
+    bpy.utils.unregister_class(BlendNetTasksRemoveEndedOperation)
     bpy.utils.unregister_class(BlendNetTaskRemoveOperation)
+    bpy.utils.unregister_class(BlendNetTasksStopStartedOperation)
     bpy.utils.unregister_class(BlendNetTaskStopOperation)
     bpy.utils.unregister_class(BlendNetTaskStartOperation)
     bpy.utils.unregister_class(BlendNetTaskDetailsOperation)

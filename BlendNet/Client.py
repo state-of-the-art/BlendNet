@@ -47,11 +47,11 @@ class Client:
 
     def taskInfo(self, task):
         '''Return the task current info'''
-        return self._engine.get('task/%s' % task)
+        return self._engine.get('task/%s' % task) or {}
 
     def taskStatus(self, task):
         '''Return the task current status'''
-        return self._engine.get('task/%s/status' % task)
+        return self._engine.get('task/%s/status' % task) or {}
 
     def taskMessages(self, task):
         '''Return the task execution messages'''

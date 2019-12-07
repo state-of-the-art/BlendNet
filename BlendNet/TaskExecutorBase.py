@@ -171,7 +171,7 @@ class TaskExecutorBase(ABC):
             # Remove the snapshot file if existing
             filename = 'task-%s.json' % hashlib.sha1(name.encode('utf-8')).hexdigest()
             filepath = os.path.join(self._tasks_dir, filename)
-            if not os.path.exists(filepath):
+            if os.path.exists(filepath):
                 os.remove(filepath)
 
     def taskAddToPending(self, task):
