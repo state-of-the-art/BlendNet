@@ -114,6 +114,10 @@ class ManagerAgentWorker:
                 continue
 
             if self.busy():
+                if not current_task.isRunning():
+                    print('WARN: Stopping the current task "%s" - manager task is not running anymore' % current_task.name())
+                    self.taskStop(self._work['task_name'])
+                    self.workEnded()
                 time.sleep(1.0)
                 last_time_had_task = time.time()
                 continue

@@ -247,7 +247,7 @@ def updateManagerTasks():
         return
 
     fresh_tasks_ids = set(tasks.keys())
-    cached_tasks_ids = set(manager_tasks_cache.keys())
+    cached_tasks_ids = set( task.name for task in tasks_prop )
 
     to_add = fresh_tasks_ids.difference(cached_tasks_ids)
     to_rem = cached_tasks_ids.difference(fresh_tasks_ids)
