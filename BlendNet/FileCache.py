@@ -110,7 +110,7 @@ class FileCache:
             self._write_cache_timer = None
 
     def blobGet(self, sha1):
-        '''Jut get blob and return info or return None'''
+        '''Get blob and return info or return None'''
         with self._blobs_map_lock:
             if sha1 in self._blobs_map:
                 return self._blobs_map[sha1].copy()

@@ -265,6 +265,7 @@ class BlendNetToggleManager(bpy.types.Operator):
         return context.window_manager.blendnet.status == 'idle'
 
     def invoke(self, context, event):
+        self.retry_counter = 50
         wm = context.window_manager
         BlendNet.addon.toggleManager()
 
@@ -731,7 +732,7 @@ class BlendNetTaskRemoveOperation(bpy.types.Operator):
         bn = context.window_manager.blendnet
         if len(bn.manager_tasks) <= bn.manager_tasks_idx:
             return False
-        return bn.manager_tasks[bn.manager_tasks_idx].state in {'CREATED', 'STOPPED', 'COMPLETED'}
+        return bn.manager_tasks[bn.manager_tasks_idx].state in {'CREATED', 'STOPPED', 'COMPLETED', 'ERROR'}
 
     def invoke(self, context, event):
         wm = context.window_manager

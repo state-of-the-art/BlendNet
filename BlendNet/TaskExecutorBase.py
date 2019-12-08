@@ -142,6 +142,7 @@ class TaskExecutorBase(ABC):
                             data = json.load(f)
                             task = self._task_type(self, data['name'], data)
                             self._tasks[task.name()] = task
+                            task.check()
                             if task.isPending():
                                 self.taskAddToPending(task)
                     except Exception as e:
@@ -177,6 +178,8 @@ class TaskExecutorBase(ABC):
     def taskAddToPending(self, task):
         '''Put task object into the pending list'''
         with self._tasks_pending_lock:
+            if not task.check():
+                print('ERROR: Unable to set to pending not ready task %s' % task.name())
             task.statePending()
             self._tasks_pending.append(task)
         print('DEBUG: Moved task to pending: "%s"' % task.name())
