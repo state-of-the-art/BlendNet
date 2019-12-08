@@ -176,8 +176,9 @@ class AgentTask(TaskBase):
                     finished = operation == 'Finished'
                     process.stdin.write(b'end\n')
                     process.stdin.flush()
-                    self.statusRenderTimeSet(time_sec - prepare_time)
-                    self.statusSamplesDoneSet(curr_sample)
+                    if curr_sample > 1:
+                        self.statusRenderTimeSet(time_sec - prepare_time)
+                        self.statusSamplesDoneSet(curr_sample if finished else curr_sample-1)
 
             # Collecting the render statistics
             if l.startswith('Render statistics:'):
@@ -240,7 +241,17 @@ class AgentTask(TaskBase):
                     break
 
         print('INFO: Read of process stdout completed')
-        process.communicate()
+        try:
+            process.communicate(timeout=15)
+        except TimeoutExpired:
+            print('WARN: Killing the subprocess')
+            process.kill()
+            process.communicate()
+
+        print('DEBUG: Return code: %s' % process.poll())
+
+        if process.poll() == -9: # OOM kill
+            self.stateError('The worker was killed by Out Of Memory - try to use bigger VM for the task')
 
         if finished:
             self.stateComplete()

@@ -49,6 +49,7 @@ class TaskState(Enum):
     PENDING = 2   # When it's triggered to execute, but there is not enough available executors
     RUNNING = 3   # Task is used by at least one executor
     COMPLETED = 4 # No more actions is required and results could be collected
+    ERROR = 5     # Error happened during task execution or validation
 
 class TaskBase(ABC):
     '''Class with the common task functional'''
@@ -80,6 +81,7 @@ class TaskBase(ABC):
         self._state_lock = threading.Lock()
         state_name = data.get('state', TaskState.CREATED.name)
         self._state = TaskState[state_name] if state_name != TaskState.RUNNING.name else TaskState.STOPPED
+        self._state_error_info = data.get('state_error_info', [])
 
         self._execution_lock = threading.Lock()
         self._execution_watcher = None
@@ -113,6 +115,7 @@ class TaskBase(ABC):
             'start_time': self._start_time,
             'end_time': self._end_time,
             'state': self._state.name,
+            'state_error_info': self._state_error_info,
             'execution_details': self._execution_details.copy(),
             'execution_messages': self._execution_messages.copy(),
             'files': self._files.copy(),
@@ -121,7 +124,7 @@ class TaskBase(ABC):
 
     def info(self):
         '''Returns info about the task'''
-        return {
+        out = {
             'name': self.name(),
             'create_time': self._create_time,
             'start_time': self._start_time,
@@ -129,20 +132,20 @@ class TaskBase(ABC):
             'state': self._state.name,
             'done': self._status['samples_done'] / self._cfg.samples,
         }
+        if self._state_error_info:
+            out['state_error_info'] = self._state_error_info
+        return out
 
     def status(self):
         '''Returns the task current status information'''
         with self._status_lock:
-            out = {
-                'state': self._state.name,
-                'create_time': self._create_time,
-                'start_time': self._start_time,
-                'end_time': self._end_time,
+            out = self.info()
+            out.update({
                 'project': self._cfg.project,
                 'samples': self._cfg.samples,
                 'seed': self._cfg.seed,
                 'frame': self._cfg.frame,
-            }
+            })
             out.update(self._status)
             return out
 
@@ -182,6 +185,11 @@ class TaskBase(ABC):
         with self._state_lock:
             return self._state == TaskState.COMPLETED
 
+    def isError(self):
+        '''Returns True or False'''
+        with self._state_lock:
+            return self._state == TaskState.ERROR
+
     def isStopped(self):
         '''Returns True or False'''
         with self._state_lock:
@@ -204,19 +212,20 @@ class TaskBase(ABC):
 
     def stateStop(self):
         with self._state_lock:
-            # It can't be stopped if it's already completed
-            if self._state != TaskState.COMPLETED:
-                if self._state == TaskState.RUNNING:
-                    self._end_time = int(time.time())
+            if self._state == TaskState.RUNNING:
+                self._end_time = int(time.time())
                 self.stateSet(TaskState.STOPPED)
 
     def stateComplete(self):
         with self._state_lock:
-            # It can't be completed if it's already stopped
-            if self._state != TaskState.STOPPED:
-                if self._state == TaskState.RUNNING:
-                    self._end_time = int(time.time())
+            if self._state == TaskState.RUNNING:
+                self._end_time = int(time.time())
                 self.stateSet(TaskState.COMPLETED)
+
+    def stateError(self, info):
+        with self._state_lock:
+            self._state_error_info.append(info)
+            self.stateSet(TaskState.ERROR)
 
     def stateSet(self, state):
         '''Unify state set of the task'''
@@ -344,6 +353,17 @@ class TaskBase(ABC):
     def configsGet(self):
         '''Get all the set configs'''
         return self._cfg.configsGet()
+
+    def check(self):
+        '''Check the task integrity'''
+        errors = []
+        with self._files_lock:
+            for path, sha1 in self._files.items():
+                if not self._parent._fc.blobGet(sha1):
+                    errors.append('Unable to find required file "%s" with id "%s" in file cache' % (path, sha1))
+        if errors:
+            self.stateError(errors)
+        return True
 
     def prepareWorkspace(self, files_map = None):
         '''Preparing workspace to process files'''

@@ -32,7 +32,7 @@ class ManagerTask(TaskBase):
             self._status.update({
                 'start_time_actual': self._status.get('start_time_actual'), # Time of the first agent task started
                 'samples_per_workload': self._status.get('samples_per_workload'), # How much samples manager give to one agent
-                'samples_acquired': self._status.get('samples_acquired', 0), # How much samples was taken to process by agents
+                'samples_acquired': self._status.get('samples_done', 0), # How much samples was taken to process by agents
                 'workloads_taken': self._status.get('workloads_taken', 0), # How much agent tasks was taken
                 'results_processing': self._status.get('results_processing'), # While results still processing task can't be completed
             })
@@ -187,7 +187,8 @@ class ManagerTask(TaskBase):
         with self._results_preview_lock:
             old_blob_id = self._results_preview.get(agent_task)
             if blob_id == None:
-                self._results_preview.pop(agent_task)
+                if agent_task in self._results_preview:
+                    self._results_preview.pop(agent_task)
             else:
                 self._results_preview[agent_task] = blob_id
         if old_blob_id:
@@ -201,7 +202,8 @@ class ManagerTask(TaskBase):
         with self._results_render_lock:
             old_blob_id = self._results_render.get(agent_task)
             if blob_id == None:
-                self._results_render.pop(agent_task)
+                if agent_task in self._results_render:
+                    self._results_render.pop(agent_task)
             else:
                 self._results_render[agent_task] = blob_id
         if old_blob_id:
@@ -217,7 +219,7 @@ class ManagerTask(TaskBase):
             self._results_watcher = threading.Thread(target=self._resultsWatcher)
             self._results_watcher.start()
 
-        task_end_states = (TaskState.STOPPED.name, TaskState.COMPLETED.name)
+        task_end_states = {TaskState.STOPPED.name, TaskState.COMPLETED.name, TaskState.ERROR.name}
         update_messages_time = 0
 
         while self.isRunning():
@@ -274,6 +276,11 @@ class ManagerTask(TaskBase):
                             if not self._status['start_time_actual']:
                                 self._status['start_time_actual'] = task_status.get('start_time')
 
+                    if task_status.get('state') in task_end_states:
+                        print('DEBUG: Retreive details about the task %s execution' % task_name)
+                        self.executionDetailsSet(agent.taskDetails(task_name).get(task_name), task_name)
+                        agent.workEnded()
+
                     if task_status.get('state') == TaskState.STOPPED.name:
                         print('WARN: The agent task %s was stopped' % task_name)
                         return_samples = task_status.get('samples', agent.work().get('samples'))
@@ -292,15 +299,12 @@ class ManagerTask(TaskBase):
                         if return_samples > 0:
                             print('DEBUG: Agent %s returning samples to render: %s' % (agent._name, return_samples))
                             self.returnAcquiredWorkload(return_samples)
-                        agent.workEnded()
 
                     if task_status.get('state') == TaskState.COMPLETED.name:
                         print('INFO: The agent task %s was completed' % task_name)
-                        agent.workEnded()
 
-                    if task_status.get('state') in task_end_states:
-                        print('DEBUG: Retreive details about the task %s execution' % task_name)
-                        self.executionDetailsSet(agent.taskDetails(task_name).get(task_name), task_name)
+                    if task_status.get('state') == TaskState.ERROR.name:
+                        print('ERROR: The agent task %s was ended with status "ERROR"' % task_name)
 
                 self._execution_status[task_name] = task_status
 
@@ -330,18 +334,25 @@ class ManagerTask(TaskBase):
 
             # Check if all the samples was processed and tasks completed
             with self._status_lock:
-                if not self._status['results_processing'] \
-                        and all([ self._execution_status[task].get('state') in task_end_states for task in self._execution_status ]):
-                    if self._stop_task:
-                        print('INFO: Task %s is stopped' % self.name())
-                        self.stateStop()
-                        self._stop_task = False
-                        continue
-                    # >= to make sure some calculate bug will not stop the completion of the task
-                    if self._status['samples_done'] >= self._cfg.samples:
-                        print('INFO: Task %s is completed' % self.name())
-                        self.stateComplete()
-                        continue
+                if not self._status['results_processing']:
+                    if any([ task.get('state') == TaskState.ERROR.name for task in self._execution_status.values() ]):
+                        for name, task in self._execution_status.items():
+                            if not task.get('state_error_info'):
+                                continue
+                            print('ERROR: Agent task "%s" ended up in ERROR state' % name)
+                            self.stateError({name: task.get('state_error_info')})
+
+                    elif all([ task.get('state') in task_end_states for task in self._execution_status.values() ]):
+                        if self._stop_task:
+                            print('INFO: Task %s is stopped' % self.name())
+                            self.stateStop()
+                            self._stop_task = False
+                            continue
+                        # >= to make sure some calculate bug will not stop the completion of the task
+                        if self._status['samples_done'] >= self._cfg.samples:
+                            print('INFO: Task %s is completed' % self.name())
+                            self.stateComplete()
+                            continue
 
             time.sleep(1.0)
 

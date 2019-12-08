@@ -18,7 +18,8 @@ class Workers:
 
         self._tasks_lock = threading.Lock()
         self._tasks_added = 0
-        self._tasks_done = 0
+        self._tasks_ended = 0
+        self._tasks_failed = []
 
         self._max_workers = max_workers
         self._workers = []
@@ -34,10 +35,19 @@ class Workers:
         while self._enabled:
             try:
                 data = self._to_process.get(True, 0.1)
-                self._worker_func(*data)
+                try:
+                    result = self._worker_func(*data)
+                except Exception as e:
+                    print('ERROR: Exception occurred during worker "%s" execution with data %s: %s' % (self._name, data, e))
+                    result = e
+
+                if result != None:
+                    with self._tasks_lock:
+                        self._tasks_failed.append(result)
+
                 self._to_process.task_done()
                 with self._tasks_lock:
-                    self._tasks_done += 1
+                    self._tasks_ended += 1
             except queue.Empty:
                 print('DEBUG: Workers "%s" worker thread completed' % self._name)
                 break # Thread will stop if there is no tasks
@@ -74,6 +84,7 @@ class Workers:
     def wait(self):
         '''Wait untill all the items will be processed'''
         self._to_process.join()
+        return len(self._tasks_failed) == 0
 
     def add(self, *data):
         '''Just adds data to process'''
@@ -94,12 +105,17 @@ class Workers:
         with self._tasks_lock:
             return self._tasks_added
 
-    def tasksDone(self):
-        '''Returns number of tasks completed'''
+    def tasksEnded(self):
+        '''Returns number of tasks ended somehow'''
         with self._tasks_lock:
-            return self._tasks_done
+            return self._tasks_ended
+
+    def tasksFailed(self):
+        '''Returns list of results of tasks failed during execution'''
+        with self._tasks_lock:
+            return self._tasks_failed
 
     def tasksLeft(self):
         '''Returns number of tasks completed'''
         with self._tasks_lock:
-            return self._tasks_added - self._tasks_done
+            return self._tasks_added - self._tasks_ended

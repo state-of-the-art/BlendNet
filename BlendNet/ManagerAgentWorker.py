@@ -138,10 +138,14 @@ class ManagerAgentWorker:
                         break
 
             if self._work:
+                last_time_had_task = time.time()
                 print('DEBUG: New workload for "%s": %s' % (self._name, self._work))
                 # Upload deps anyway - who knows, maybe agent was destroyed
                 # It will take not long time if files are already uploaded
-                self.uploadFiles(self._work['task_name'], current_task.filesGet())
+                if not self.uploadFiles(self._work['task_name'], current_task.filesGet()):
+                    current_task.stateError('Unable to upload the required files')
+                    self.workEnded()
+                    continue
                 self.sendWorkload(self._work['task_name'], self._work)
                 self.runWorkload(self._work['task_name'])
             elif last_time_had_task and time.time() > last_time_had_task + 300:
@@ -262,10 +266,12 @@ class ManagerAgentWorker:
         )
 
         workers.addSet(set( (task_name, path, sha1) for path, sha1 in files_map.items() ))
-        workers.wait()
+        if workers.wait():
+            print('DEBUG: Uploading files to Agent "%s" task "%s" completed' % (self._name, task_name))
+            return True
 
-        print('DEBUG: Uploading files to Agent "%s" task "%s" completed' % (self._name, task_name))
-        return True
+        print('ERROR: Unable to upload task "%s" files: %s' % (task_name, workers.tasksFailed()))
+        return False
 
     def _uploadFilesWorker(self, task, rel_path, sha1):
         '''Gets item and uploads using client'''
@@ -277,6 +283,7 @@ class ManagerAgentWorker:
                     break
                 print('WARN: Uploading of "%s" to task "%s" failed, repeating...' % (rel_path, task))
                 time.sleep(1.0)
+
         print('DEBUG: Uploading of "%s" to task "%s" completed' % (rel_path, task))
 
     def sendWorkload(self, task_name, workload):
