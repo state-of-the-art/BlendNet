@@ -4,6 +4,7 @@ Dependencies: google cloud sdk installed and configured auth
 
 Copyright 2020 Google LLC.
 SPDX-License-Identifier: Apache-2.0
+
 '''
 
 __all__ = [
