@@ -1,10 +1,6 @@
 '''Google Cloud Platform
 Provide API access to allocate required resources in GCP
 Dependencies: google cloud sdk installed and configured auth
-
-Copyright 2020 Google LLC.
-SPDX-License-Identifier: Apache-2.0
-
 '''
 import pathlib
 import platform
