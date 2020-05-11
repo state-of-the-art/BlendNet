@@ -6,6 +6,8 @@ Copyright 2020 Google LLC.
 SPDX-License-Identifier: Apache-2.0
 
 '''
+import pathlib
+import platform
 
 __all__ = [
     'Manager',
@@ -58,13 +60,12 @@ def setGoogleCloudSdk(path):
 
 def findGoogleCloudSdk():
     '''Will try to find the google cloud sdk home directory'''
-    import os
     import subprocess
     # windows doesn't use PATH to locate binary unless shell=True
-    if os.name == 'nt':
-       result = subprocess.run(['gcloud', 'info'], shell=True, stdout=subprocess.PIPE)
+    if platform.system() == 'Windows':
+        result = subprocess.run(['gcloud', 'info'], shell=True, stdout=subprocess.PIPE)
     else:
-       result =  subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
+        result =  subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
     if result.returncode != 0:
         return
     lines = result.stdout.decode('utf-8').split('\n')
@@ -554,7 +555,6 @@ def createBucket(bucket_name):
 
 def uploadFileToBucket(path, bucket_name, dest_path = None):
     '''Upload file to the bucket'''
-    import pathlib
     from googleapiclient.http import MediaIoBaseUpload
     storage = _getStorage()
 
@@ -563,7 +563,7 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     }
     
     # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
-    if os.name == 'nt':
+    if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
 
     print('INFO: Uploading file to "gs://%s/%s"...' % (bucket_name, body['name']))
@@ -578,7 +578,6 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
 
 def uploadDataToBucket(data, bucket_name, dest_path):
     '''Upload file to the bucket'''
-    import pathlib
     from googleapiclient.http import MediaInMemoryUpload
     storage = _getStorage()
 
@@ -587,7 +586,7 @@ def uploadDataToBucket(data, bucket_name, dest_path):
     }
     
     # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
-    if os.name == 'nt':
+    if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
 
     print('INFO: Uploading data to "gs://%s/%s"...' % (bucket_name, body['name']))
