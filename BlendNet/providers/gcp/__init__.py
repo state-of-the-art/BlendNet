@@ -2,6 +2,8 @@
 Provide API access to allocate required resources in GCP
 Dependencies: google cloud sdk installed and configured auth
 '''
+import pathlib
+import platform
 
 __all__ = [
     'Manager',
@@ -55,7 +57,11 @@ def setGoogleCloudSdk(path):
 def findGoogleCloudSdk():
     '''Will try to find the google cloud sdk home directory'''
     import subprocess
-    result = subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
+    # windows doesn't use PATH to locate binary unless shell=True
+    if platform.system() == 'Windows':
+        result = subprocess.run(['gcloud', 'info'], shell=True, stdout=subprocess.PIPE)
+    else:
+        result =  subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
     if result.returncode != 0:
         return
     lines = result.stdout.decode('utf-8').split('\n')
@@ -551,6 +557,10 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     body = {
         'name': dest_path or path,
     }
+    
+    # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
+    if platform.system() == 'Windows':
+        body['name'] = pathlib.PurePath(body['name']).as_posix()
 
     print('INFO: Uploading file to "gs://%s/%s"...' % (bucket_name, body['name']))
     with open(path, 'rb') as f:
@@ -570,6 +580,10 @@ def uploadDataToBucket(data, bucket_name, dest_path):
     body = {
         'name': dest_path,
     }
+    
+    # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
+    if platform.system() == 'Windows':
+        body['name'] = pathlib.PurePath(body['name']).as_posix()
 
     print('INFO: Uploading data to "gs://%s/%s"...' % (bucket_name, body['name']))
     # TODO: make sure file uploaded or there is an isssue
