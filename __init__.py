@@ -6,7 +6,7 @@ bl_info = {
     'location': 'Properties --> Render --> BlendNet Render',
     'description': 'Allows to easy allocate resources in cloud and '
                    'run the cycles rendering with getting preview '
-                   'and results.',
+                   'and results',
     'wiki_url': 'https://github.com/state-of-the-art/BlendNet/wiki',
     'tracker_url': 'https://github.com/state-of-the-art/BlendNet/issues',
     'category': 'Render',
@@ -42,19 +42,47 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
     cloud_provider: EnumProperty(
         name = 'Cloud Provider',
-        description = 'Cloud provider to allocate resources for rendering.',
+        description = 'Cloud provider to allocate resources for rendering',
         items = BlendNet.addon.getProvidersEnumItems(),
         update = lambda self, context: BlendNet.addon.selectProvider(self.cloud_provider),
     )
 
     # Advanced
+    blender_dist: EnumProperty(
+        name = 'Blender dist',
+        description = 'Blender distributive to use on manager/agents. '
+            'By default it\'s set to the current blender version and if '
+            'you want to change it - you will deal with the custom URL',
+        items = BlendNet.addon.fillAvailableBlenderDists,
+        update = lambda self, context: BlendNet.addon.updateBlenderDistProp(self.blender_dist),
+    )
+
+    blender_dist_url: StringProperty(
+        name = 'Blender dist URL',
+        description = 'URL to download the blender distributive',
+        default = '',
+    )
+
+    blender_dist_checksum: StringProperty(
+        name = 'Blender dist checksum',
+        description = 'Checksum of the distributive to validate the binary',
+        default = '',
+    )
+
+    blender_dist_custom: BoolProperty(
+        name = 'Custom dist URL',
+        description = 'Use custom url instead the automatic one',
+        default = False,
+        update = lambda self, context: BlendNet.addon.updateBlenderDistProp(),
+    )
+
     session_id: StringProperty(
         name = 'Session ID',
         description = 'Identifier of the session and allocated resources. '
                       'It is used to properly find your resources in the GCP '
                       'project and separate your resources from the other ones. '
                       'Warning: Please be careful with this option and don\'t '
-                      'change it if you don\'t know what it\'s doing.',
+                      'change it if you don\'t know what it\'s doing',
         maxlen = 12,
         update = lambda self, context: BlendNet.addon.genSID(self, 'session_id'),
     )
@@ -68,7 +96,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
     manager_port: IntProperty(
         name = 'Port',
-        description = 'TLS tcp port to communicate Addon with Manager service.',
+        description = 'TLS tcp port to communicate Addon with Manager service',
         min = 1,
         max = 65535,
         default = 8443,
@@ -76,14 +104,14 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
     manager_user: StringProperty(
         name = 'User',
-        description = 'HTTP Basic Auth username (will be generated if empty).',
+        description = 'HTTP Basic Auth username (will be generated if empty)',
         maxlen = 32,
         default = 'blendnet-manager',
     )
 
     manager_password: StringProperty(
         name = 'Password',
-        description = 'HTTP Basic Auth password (will be generated if empty).',
+        description = 'HTTP Basic Auth password (will be generated if empty)',
         maxlen = 128,
         default = '',
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'manager_password'),
@@ -91,7 +119,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
     agent_port: IntProperty(
         name = 'Port',
-        description = 'TLS tcp port to communicate Manager with Agent service.',
+        description = 'TLS tcp port to communicate Manager with Agent service',
         min = 1,
         max = 65535,
         default = 9443,
@@ -99,14 +127,14 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
     agent_user: StringProperty(
         name = 'User',
-        description = 'HTTP Basic Auth username (will be generated if empty).',
+        description = 'HTTP Basic Auth username (will be generated if empty)',
         maxlen = 32,
         default = 'blendnet-agent',
     )
 
     agent_password: StringProperty(
         name = 'Password',
-        description = 'HTTP Basic Auth password (will be generated if empty).',
+        description = 'HTTP Basic Auth password (will be generated if empty)',
         maxlen = 128,
         default = '',
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'agent_password'),
@@ -116,7 +144,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     show_advanced: BoolProperty(
         name = 'Advanced Properties',
         description = 'Show/Hide the advanced properties',
-        default = False
+        default = False,
     )
 
     manager_password_hidden: StringProperty(
@@ -151,6 +179,13 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         if self.show_advanced:
             row = box.row()
             row.prop(self, 'session_id')
+            row = box.row(align=True)
+            row.prop(self, 'blender_dist_custom', text='')
+            if not self.blender_dist_custom:
+                row.prop(self, 'blender_dist')
+            else:
+                row.prop(self, 'blender_dist_url')
+                box.row().prop(self, 'blender_dist_checksum')
             box_box = box.box()
             box_box.label(text='Manager')
             row = box_box.row()
@@ -174,13 +209,13 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 class BlendNetSceneSettings(bpy.types.PropertyGroup):
     manager_instance_type: EnumProperty(
         name = 'Manager size',
-        description = 'Selected manager instance size.',
+        description = 'Selected manager instance size',
         items = BlendNet.addon.fillAvailableInstanceTypesManager,
     )
 
     manager_agents_max: IntProperty(
         name = 'Agents max',
-        description = 'Maximum number of agents in Manager\'s pool.',
+        description = 'Maximum number of agents in Manager\'s pool',
         min = 1,
         max = 65535,
         default = 3,
@@ -188,7 +223,7 @@ class BlendNetSceneSettings(bpy.types.PropertyGroup):
 
     manager_agent_instance_type: EnumProperty(
         name = 'Agent size',
-        description = 'Selected agent instance size.',
+        description = 'Selected agent instance size',
         items = BlendNet.addon.fillAvailableInstanceTypesAgent,
     )
 
@@ -1016,7 +1051,6 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
 
 def initPreferences():
     '''Will init the preferences with defaults'''
-    import random, string
     prefs = bpy.context.preferences.addons[__package__].preferences
 
     # Set defaults for preferences
@@ -1031,6 +1065,8 @@ def initPreferences():
         prefs.manager_password_hidden = ''
     if prefs.agent_password_hidden == '':
         prefs.agent_password_hidden = ''
+
+    BlendNet.addon.fillAvailableBlenderDists()
 
 def register():
     bpy.utils.register_class(BlendNetAddonPreferences)

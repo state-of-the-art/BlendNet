@@ -8,10 +8,29 @@ import bpy
 import time
 import threading
 import hashlib
+from urllib.request import urlopen
+from html.parser import HTMLParser
 
 from . import providers
 from . import ManagerClient
 from .Workers import Workers
+
+class LinkHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        for attr in attrs:
+            if attr[0] == 'href':
+                self._links.append(attr[1])
+
+    def links(self):
+        out = self._links
+        self._links = []
+        return out
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
@@ -61,7 +80,6 @@ def genSID(obj, prop, num = 6):
 
 def getConfig():
     '''Function to update config when params is changed'''
-    import bpy
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
     bn = bpy.context.scene.blendnet
 
@@ -234,7 +252,6 @@ manager_tasks_cache = {}
 
 def updateManagerTasks():
     '''Update cache and return the current manager tasks'''
-    import bpy
     global manager_tasks_cache
 
     tasks_prop = bpy.context.window_manager.blendnet.manager_tasks
@@ -471,3 +488,113 @@ def managerTaskRemove(task):
 
 def managerTaskResultDownload(task, result, file_path):
     return ManagerClient(getManagerIP(), getConfig()).taskResultDownload(task, result, file_path)
+
+available_blender_dists_cache = None
+available_blender_dists_cache_list = []
+
+def fillAvailableBlenderDists(scene = None, context = None):
+    '''Cached blender dists list for the UI interface'''
+    # TODO: Not multithread for now - need to add locks
+
+    def worker(area):
+        global available_blender_dists_cache
+        global available_blender_dists_cache_list
+
+        mirrors = [
+            'https://download.blender.org/release/',
+            'https://mirror.clarkson.edu/blender/release/',
+            'https://ftp.nluug.nl/pub/graphics/blender/release/',
+        ]
+
+        # TODO: Use system certificates
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        for url in mirrors:
+            try:
+                # Getting the first layer of mirror list
+                parser = LinkHTMLParser()
+                with urlopen(url, timeout=1, context=ctx) as f:
+                    parser.feed(f.read().decode())
+
+                # Processing links of the first layer
+                links = parser.links()
+                dirs = []
+                for l in links:
+                    if not l.startswith('Blender'):
+                        continue
+                    ver = int(''.join(c for c in l if c.isdigit()))
+                    if ver >= 280: # >= 2.80 is supported
+                        dirs.append(l)
+
+                # Getting lists of the specific dirs
+                for d in dirs:
+                    with urlopen(url+d, timeout=1, context=ctx) as f:
+                        parser.feed(f.read().decode())
+
+                    # Processing links of the dirs
+                    links = parser.links()
+                    for l in links:
+                        if not l.endswith('.sha256'):
+                            continue
+                        # Getting the file and search for linux dist there
+                        with urlopen(url+d+l, timeout=1, context=ctx) as f:
+                            for line in f:
+                                sha256, name = line.decode().strip().split()
+                                if '-linux' not in name or '64.tar' not in name:
+                                    continue
+                                ver = name.split('-')[1]
+                                available_blender_dists_cache[ver] = {
+                                    'url': url+d+name,
+                                    'checksum': sha256,
+                                }
+                                print('INFO: found blender version: %s (%s %s)' % (ver, url, sha256))
+
+                # Don't need to check the other sites
+                break
+
+            except Exception as e:
+                print('WARN: unable to get mirror list for: %s %s' % (url, e))
+                pass
+
+        keys = naturalSort(available_blender_dists_cache.keys())
+        out = []
+        for key in keys:
+            out.append( (key, key, available_blender_dists_cache[key]['url']) )
+        available_blender_dists_cache_list = out
+
+        updateBlenderDistProp()
+
+        if area:
+            area.tag_redraw()
+
+    global available_blender_dists_cache
+    global available_blender_dists_cache_list
+    if available_blender_dists_cache == None:
+        available_blender_dists_cache = {}
+        _runBackgroundWork(worker, context.area if context else None)
+        return available_blender_dists_cache_list
+
+    return available_blender_dists_cache_list
+
+def updateBlenderDistProp(version = None):
+    '''Update the dist property if not set to custom'''
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    if prefs.blender_dist_custom:
+        return
+
+    if not version:
+        version = bpy.app.version_string
+    elif version != bpy.app.version_string and not prefs.blender_dist_custom:
+        # If user changing it - than it's become custom
+        prefs.blender_dist_custom = True
+
+    if version in available_blender_dists_cache:
+        if prefs.blender_dist != version:
+            prefs.blender_dist = version
+        prefs.blender_dist_url = available_blender_dists_cache[version]['url']
+        prefs.blender_dist_checksum = available_blender_dists_cache[version]['checksum']
+    else:
+        print('ERROR: unable to find blender dist version', version)
