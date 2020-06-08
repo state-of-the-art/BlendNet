@@ -824,6 +824,10 @@ class BlendNetTaskMenu(bpy.types.Menu):
         layout = self.layout
         wm = context.window_manager
 
+        if len(wm.blendnet.manager_tasks) == 0:
+            layout.label(text='No tasks in the list')
+            return
+
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
 
         layout.label(text='Task "%s":' % task_name)

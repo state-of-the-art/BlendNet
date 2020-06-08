@@ -12,6 +12,8 @@ A clear and concise description of what the bug is.
 
 ### Environment:
 * **Application version**: [e.g. 0.2.0]
+* **Blender client version**: [e.g. 2.83.0 (where addon is running)]
+* **Blender worker version**: [e.g. 2.83.0 (which is used for manager/agents)]
 * **OS**: [e.g. Ubuntu 18.04]
 
 ### Steps to reproduce:

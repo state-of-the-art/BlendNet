@@ -587,16 +587,25 @@ def updateBlenderDistProp(version = None):
     if prefs.blender_dist_custom:
         return
 
+    client_version = bpy.app.version_string.split()[0]
     if not version:
-        version = bpy.app.version_string
-    elif version != bpy.app.version_string and not prefs.blender_dist_custom:
+        version = client_version
+    elif version != client_version and not prefs.blender_dist_custom:
         # If user changing it - than it's become custom
         prefs.blender_dist_custom = True
 
-    if version in available_blender_dists_cache:
-        if prefs.blender_dist != version:
-            prefs.blender_dist = version
-        prefs.blender_dist_url = available_blender_dists_cache[version]['url']
-        prefs.blender_dist_checksum = available_blender_dists_cache[version]['checksum']
-    else:
-        print('ERROR: unable to find blender dist version', version)
+    if version not in available_blender_dists_cache:
+        print('WARN: unable to find blender dist version, using the closest one for', version)
+        import difflib
+        vers = difflib.get_close_matches(version, available_blender_dists_cache.keys(), cutoff=0.0)
+        if len(vers):
+            version = vers[0]
+            print('WARN: choosen:', version)
+        else:
+            version = available_blender_dists_cache.keys()[-1]
+            print('WARN: Unable to find the good one, use latest:', version)
+
+    if prefs.blender_dist != version:
+        prefs.blender_dist = version
+    prefs.blender_dist_url = available_blender_dists_cache[version]['url']
+    prefs.blender_dist_checksum = available_blender_dists_cache[version]['checksum']
