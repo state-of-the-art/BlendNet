@@ -200,20 +200,16 @@ def _getInstance(instance_name):
     except Exception as e:
         return None
 
-def createInstanceManager(instance_type, session_id, name):
+def createInstanceManager(cfg):
     '''Creating a new instance for BlendNet Manager'''
-
     compute, configs = _getCompute(), _getConfigs()
 
-    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], instance_type)
+    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], cfg['instance_type'])
     # TODO: add option to specify the image to use
     #image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
     image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
 
     # TODO: make script overridable
-    # TODO: a way to use custom url's to download the deps
-    blender_sha256 = 'e201e7c3dd46aae4a464ec764190199b0ca9ff2e51f9883cd869a4539f33c592'
-    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'
@@ -259,22 +255,22 @@ EOF
 systemctl daemon-reload
 systemctl start blendnet-manager.service # We don't need "enable" here
     '''.format(
-        blender_sha256=blender_sha256,
-        blender_url=blender_url,
+        blender_url=cfg['dist_url'],
+        blender_sha256=cfg['dist_checksum'],
         project=configs['project'],
-        session_id=session_id,
+        session_id=cfg['session_id'],
     )
     #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py' blendnet-user
 
     data = {
-        'name': name,
+        'name': cfg['instance_name'],
         'machineType': machine,
         'minCpuPlatform': 'Intel Skylake', # Using the best option
         'description': 'BlendNet Agents Manager',
         'labels': {
             'app': 'blendnet',
             'type': 'manager',
-            'session_id': session_id,
+            'session_id': cfg['session_id'],
         },
         'tags': { # TODO: add a way to specify custom tags
             'items': ['blendnet-manager']
@@ -323,20 +319,17 @@ systemctl start blendnet-manager.service # We don't need "enable" here
 
     return True
 
-def createInstanceAgent(instance_type, session_id, name):
+def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
 
     compute, configs = _getCompute(), _getConfigs()
     # TODO: option to specify prefix/suffix for the name
-    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], instance_type)
+    machine = 'zones/%s/machineTypes/%s' % (configs['zone'], cfg['instance_type'])
     # TODO: add option to specify the image to use
     #image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
     image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
 
     # TODO: make script overridable
-    # TODO: a way to use custom url's to download the deps
-    blender_sha256 = 'e201e7c3dd46aae4a464ec764190199b0ca9ff2e51f9883cd869a4539f33c592'
-    blender_url = 'https://mirror.clarkson.edu/blender/release/Blender2.81/blender-2.81-linux-glibc217-x86_64.tar.bz2'
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'
@@ -381,16 +374,16 @@ EOF
 systemctl daemon-reload
 systemctl start blendnet-agent.service # We don't need "enable" here
     '''.format(
-        blender_sha256=blender_sha256,
-        blender_url=blender_url,
+        blender_url=cfg['dist_url'],
+        blender_sha256=cfg['dist_checksum'],
         project=configs['project'],
-        session_id=session_id,
-        name=name,
+        session_id=cfg['session_id'],
+        name=cfg['instance_name'],
     )
     #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py' blendnet-user
 
     data = {
-        'name': name,
+        'name': cfg['instance_name'],
         'machineType': machine,
         'minCpuPlatform': 'Intel Skylake', # Using the best option
         'description': 'BlendNet Agent worker',
@@ -400,7 +393,7 @@ systemctl start blendnet-agent.service # We don't need "enable" here
         'labels': {
             'app': 'blendnet',
             'type': 'agent',
-            'session_id': session_id,
+            'session_id': cfg['session_id'],
         },
         'tags': { # TODO: add a way to specify custom tags
             'items': ['blendnet-agent'],

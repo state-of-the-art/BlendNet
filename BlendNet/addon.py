@@ -85,6 +85,8 @@ def getConfig():
 
     cfg = {} # TODO: Move to ManagerConfig
     cfg['session_id'] = prefs.session_id
+    cfg['dist_url'] = prefs.blender_dist_url
+    cfg['dist_checksum'] = prefs.blender_dist_checksum
     cfg['bucket'] = providers.getBucketName(cfg['session_id'])
 
     cfg['listen_port'] = prefs.manager_port
@@ -368,7 +370,7 @@ def startManager(cfg = None):
 
     if not isManagerCreated():
         print('DEBUG: Creating manager instance')
-        providers.createInstanceManager(cfg['instance_type'], cfg['session_id'], cfg['instance_name'])
+        providers.createInstanceManager(cfg)
         print('DEBUG: Creating the required firewall rules')
         providers.createFirewall('blendnet-manager', cfg['listen_port'])
         # Not needed firewall for agent - manager is using internal agent ip

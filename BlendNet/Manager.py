@@ -115,6 +115,8 @@ class Manager(providers.Manager, TaskExecutorBase):
         name_template = self._cfg.agent_instance_prefix + '%04d'
         cfg = {
             'session_id': self._cfg.session_id,
+            'dist_url': self._cfg.dist_url,
+            'dist_checksum': self._cfg.dist_checksum,
             'bucket': self._cfg.bucket,
             'instance_type': self._cfg.agent_instance_type,
             'listen_host': self._cfg.agent_listen_host,
