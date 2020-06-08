@@ -24,6 +24,16 @@ class TaskExecutorConfig(Config):
             'type': str,
             'default': 'test',
         },
+        'dist_url': {
+            'description': '''Blender distributive URL''',
+            'type': str,
+            'default': 'https://example.com/blender-test.tar.xz',
+        },
+        'dist_checksum': {
+            'description': '''Blender distributive checksum''',
+            'type': str,
+            'default': '',
+        },
         'bucket': {
             'description': '''Bucket name used to store things''',
             'type': str,

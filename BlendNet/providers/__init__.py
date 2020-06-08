@@ -99,11 +99,11 @@ def getManagerSizeDefault():
 def getAgentSizeDefault():
     return _execProviderFunc('getAgentSizeDefault', '')
 
-def createInstanceManager(instance_type, session_id, name):
-    return _execProviderFunc('createInstanceManager', '', instance_type, session_id, name)
+def createInstanceManager(cfg):
+    return _execProviderFunc('createInstanceManager', '', cfg)
 
-def createInstanceAgent(instance_type, session_id, name):
-    return _execProviderFunc('createInstanceAgent', '', instance_type, session_id, name)
+def createInstanceAgent(cfg):
+    return _execProviderFunc('createInstanceAgent', '', cfg)
 
 def startInstance(name):
     return _execProviderFunc('startInstance', '', name)

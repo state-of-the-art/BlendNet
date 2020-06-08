@@ -238,9 +238,9 @@ class ManagerAgentWorker:
             providers.startInstance(self._name)
         elif self.state() == ManagerAgentState.DESTROYED:
             print('DEBUG: Creating a new agent instance "%s"' % self._name)
-            itype = self._cfg['instance_type']
             self._setState(ManagerAgentState.UNKNOWN)
-            providers.createInstanceAgent(itype, self._cfg['session_id'], self._name)
+            self._cfg['instance_name'] = self._name
+            providers.createInstanceAgent(self._cfg)
 
     def _waitAgent(self):
         '''Will wait for agent availability'''
