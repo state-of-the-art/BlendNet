@@ -8,6 +8,7 @@ import bpy
 import time
 import threading
 import hashlib
+import ssl
 from urllib.request import urlopen
 from html.parser import HTMLParser
 
@@ -508,11 +509,23 @@ def fillAvailableBlenderDists(scene = None, context = None):
             'https://ftp.nluug.nl/pub/graphics/blender/release/',
         ]
 
-        # TODO: Use system certificates
-        import ssl
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        if len(ctx.get_ca_certs()) == 0:
+            print('WARN: no ssl cacerts found, trying to locate...')
+            import site
+            for path in site.getsitepackages():
+                path = os.path.join(path, 'certifi', 'cacert.pem')
+                if not os.path.exists(path):
+                    print('DEBUG: no cert file:', path)
+                    continue
+                ctx.load_verify_locations(cafile=path)
+                break
+        if len(ctx.get_ca_certs()):
+            print('INFO: found certifi certificates')
+        else:
+            print('WARN: certificates not found - skip certs verification')
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
 
         for url in mirrors:
             try:
