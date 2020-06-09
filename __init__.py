@@ -165,10 +165,15 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         box.label(text='Collected cloud info:')
 
         provider_info = BlendNet.addon.getProviderInfo(context)
-        # TODO: Add warnings about low quotas or improper configs
+        if 'ERRORS' in provider_info:
+            for err in provider_info['ERRORS']:
+                box.label(text=err, icon='ERROR')
+
         for key, value in provider_info.items():
+            if key == 'ERRORS':
+                continue
             split = box.split(factor=0.5)
-            split.label(text=key, icon='ERROR' if key == 'ERROR' else 'DOT')
+            split.label(text=key, icon='DOT')
             split.label(text=value)
 
         # Advanced properties panel
