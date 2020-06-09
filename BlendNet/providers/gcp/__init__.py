@@ -2,8 +2,13 @@
 Provide API access to allocate required resources in GCP
 Dependencies: google cloud sdk installed and configured auth
 '''
+import sys
+import os.path
+import time
 import pathlib
 import platform
+import urllib.request
+import subprocess
 
 __all__ = [
     'Manager',
@@ -20,14 +25,12 @@ GOOGLE_CLOUD_SDK_CREDS = None
 GOOGLE_CLOUD_SDK_CONFIGS = None
 
 def _requestMetadata(path):
-    import urllib.request
     req = urllib.request.Request(METADATA_URL+path)
     req.add_header(*METADATA_HEADER)
     try:
         while True:
             with urllib.request.urlopen(req, timeout=2) as res:
                 if res.getcode() == 503:
-                    import time
                     time.sleep(1)
                     continue
                 return res.read().decode('utf-8')
@@ -46,7 +49,6 @@ def checkLocation():
 
 def setGoogleCloudSdk(path):
     global GOOGLE_CLOUD_SDK_ROOT
-    import os.path
     if os.path.isdir(path) and os.path.isdir('%s/platform' % path):
         print('INFO: Found google cloud sdk: %s' % path)
         GOOGLE_CLOUD_SDK_ROOT = path
@@ -56,7 +58,6 @@ def setGoogleCloudSdk(path):
 
 def findGoogleCloudSdk():
     '''Will try to find the google cloud sdk home directory'''
-    import subprocess
     # windows doesn't use PATH to locate binary unless shell=True
     if platform.system() == 'Windows':
         result = subprocess.run(['gcloud', 'info'], shell=True, stdout=subprocess.PIPE)
@@ -73,7 +74,6 @@ def findGoogleCloudSdk():
             return path
 
 def loadGoogleCloudSdk():
-    import sys
     print('DEBUG: Loading gcloud paths')
     sys.path.append('%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT)
     sys.path.append('%s/platform/bq/third_party' % GOOGLE_CLOUD_SDK_ROOT)
@@ -138,6 +138,58 @@ def _getStorage():
     import googleapiclient.discovery
     return googleapiclient.discovery.build('storage', 'v1', credentials=creds)
 
+def _getInstanceTypeInfo(name):
+    '''Get info about the instance type'''
+    try:
+        compute, configs = _getCompute(), _getConfigs()
+        resp = compute.machineTypes().get(project=configs['project'], zone=configs['zone'], machineType=name).execute()
+        return { 'cpu': resp['guestCpus'], 'mem': resp['memoryMb'] }
+    finally:
+        print('ERROR: Unable to get the GCP machine type info for:', name)
+
+    return None
+
+def _verifyQuotas(avail):
+    import bpy
+
+    errors = []
+
+    manager_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_instance_type)
+    agents_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_agent_instance_type)
+    agents_num = bpy.context.scene.blendnet.manager_agents_max
+
+    # Manager
+    if manager_info:
+        if avail['project']['CPUS_ALL_REGIONS'] < manager_info['cpu']:
+            errors.append('Available project CPUS_ALL_REGIONS is too small to provision the manager')
+        if avail['region']['CPUS'] < manager_info['cpu']:
+            errors.append('Available region CPUS is too small to provision the manager')
+        if avail['project']['IN_USE_ADDRESSES'] < 1: # External addresses
+            errors.append('Available project IN_USE_ADDRESSES is too small to provision the manager')
+        if avail['region']['IN_USE_ADDRESSES'] < 1: # External addresses
+            errors.append('Available region IN_USE_ADDRESSES is too small to provision the manager')
+    else:
+        errors.append('Unable to get the manager type info to validate quotas')
+
+    # Agents
+    if agents_info:
+        if avail['region']['PREEMPTIBLE_CPUS'] < agents_info['cpu']*agents_num:
+            errors.append('Available region PREEMPTIBLE_CPUS is too small to provision the agents')
+    else:
+        errors.append('Unable to get the agents type info to validate quotas')
+
+    # Common
+    if manager_info and agents_info:
+        if avail['region']['INSTANCES'] < 1 + agents_num:
+            errors.append('Available region INSTANCES is too small to provision the manager and agents')
+    else:
+        errors.append('Unable to get the manager and agents type info to validate quotas')
+
+    if errors:
+        errors.append('Please edit the project quotas and request some')
+
+    return errors
+
 def getProviderInfo():
     configs = {}
     try:
@@ -152,20 +204,28 @@ def getProviderInfo():
             'PREEMPTIBLE_CPUS',
         ]
 
+        avail = {'project': {}, 'region': {}}
+
         # Get project quotas
         resp = compute.projects().get(project=configs['project']).execute()
         for q in resp['quotas']:
             if q['metric'] in useful_quotas:
+                avail['project'][q['metric']] = q['limit'] - q['usage']
                 configs['Project quota: %s' % q['metric']] = '%.1f, usage: %.1f' % (q['limit'], q['usage'])
 
         # Get region quotas
         resp = compute.regions().get(project=configs['project'], region=configs['region']).execute()
         for q in resp['quotas']:
             if q['metric'] in useful_quotas:
+                avail['region'][q['metric']] = q['limit'] - q['usage']
                 configs['Region quota: %s' % q['metric']] = '%.1f, usage: %.1f' % (q['limit'], q['usage'])
+
+        errors = _verifyQuotas(avail)
+        if errors:
+            configs['ERRORS'] = errors
     except Exception as e:
-        configs['ERROR'] = 'Looks like access to the compute API is restricted ' \
-                           '- please check your permissions: %s' % e
+        configs['ERRORS'] = ['Looks like access to the compute API is restricted '
+                              '- please check your permissions: %s' % e]
 
     return configs
 
@@ -177,11 +237,10 @@ def getInstanceTypes():
     except:
         return {'ERROR': 'Looks like access to the compute API is restricted '
                          '- please check your permissions'}
-    return []
+    return {}
 
 def _waitForOperation(compute, project, zone, operation):
     '''Waiting for compute operation to finish...'''
-    import time
     while True:
         resp = compute.zoneOperations().get(project=project, zone=zone, operation=operation).execute()
         if resp['status'] == 'DONE':
