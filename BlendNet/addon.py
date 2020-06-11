@@ -388,6 +388,16 @@ def stopManager(cfg = None):
         print('DEBUG: Stopping manager instance')
         providers.stopInstance(cfg['instance_name'])
 
+def destroyManager(cfg = None):
+    cfg = cfg if cfg else getConfig()
+
+    def worker(cfg):
+        if isManagerStopped():
+            print('DEBUG: Destroying manager instance')
+            providers.deleteInstance(cfg['instance_name'])
+
+    _runBackgroundWork(worker, getConfig())
+
 def toggleManager():
     '''Running the manager instance if it's not already started or stopping it'''
     def worker(cfg):
