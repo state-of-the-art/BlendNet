@@ -365,6 +365,22 @@ class BlendNetToggleManager(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BlendNetDestroyManager(bpy.types.Operator):
+    bl_idname = 'blendnet.destroymanager'
+    bl_label = ''
+    bl_description = 'Destroy manager instance'
+
+    @classmethod
+    def poll(cls, context):
+        return BlendNet.addon.isManagerStopped()
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        BlendNet.addon.destroyManager()
+        self.report({'INFO'}, 'BlendNet destroy Manager instance...')
+
+        return {'FINISHED'}
+
 class BlendNetTaskPreviewOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskpreview'
     bl_label = 'Open preview'
@@ -893,6 +909,7 @@ class BlendNetManagerPanel(bpy.types.Panel):
         layout.label(text='Manager')
         layout.label(text='%s' % BlendNet.addon.getManagerStatus())
         layout.operator('blendnet.togglemanager', icon='ADD' if not BlendNet.addon.isManagerStarted() else 'X')
+        layout.operator('blendnet.destroymanager', icon='TRASH')
 
     def draw(self, context):
         layout = self.layout
@@ -1099,6 +1116,7 @@ def register():
     bpy.utils.register_class(BlendNetTaskMenu)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
+    bpy.utils.register_class(BlendNetDestroyManager)
     bpy.utils.register_class(BlendNetManagerPanel)
     bpy.utils.register_class(BlendNetAgentsPanel)
 
@@ -1106,6 +1124,7 @@ def unregister():
     bpy.utils.unregister_class(BlendNetAgentsPanel)
     bpy.utils.unregister_class(BlendNetManagerPanel)
     bpy.utils.unregister_class(BlendNetToggleManager)
+    bpy.utils.unregister_class(BlendNetDestroyManager)
     bpy.utils.unregister_class(BlendNetRenderPanel)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)

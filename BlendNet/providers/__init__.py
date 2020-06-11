@@ -111,6 +111,9 @@ def startInstance(name):
 def stopInstance(name):
     return _execProviderFunc('stopInstance', '', name)
 
+def destroyInstance(name):
+    return _execProviderFunc('destroyInstance', '', name)
+
 def deleteInstance(name):
     return _execProviderFunc('deleteInstance', '', name)
 
