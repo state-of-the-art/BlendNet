@@ -55,10 +55,100 @@ def getCaches():
             pcloc = None
             ext = None
 
-            if mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
+            if mod.type == 'FLUID' and mod.fluid_type == 'DOMAIN':
+                # New mantaflow added in 2.82
+                cachedir = os.path.realpath(bpy.path.abspath(mod.domain_settings.cache_directory)).replace(localdir, '', 1)
+                if not os.path.isdir(os.path.join(localdir, cachedir)):
+                    print('ERROR: Not a relative/not existing path of the cachedir '
+                          '"%s" for object modifier %s --> %s' % (mod.domain_settings.cache_directory, o.name, mod.name))
+                    bad.add(mod.settings.filepath)
+                    continue
+
+                mod.domain_settings.cache_directory = '//'+cachedir
+
+                def _fmt(ext_type):
+                    return {
+                        'UNI': 'uni',
+                        'OPENVDB': 'vdb',
+                        'RAW': 'raw',
+                        'OBJECT': 'obj',
+                        'BOBJECT': 'bobj.gz',
+                    }.get(ext_type, ext_type)
+
+                files = []
+                ds = mod.domain_settings
+
+                # Common config
+                files.append('config/config_%04d.uni' % scene.frame_current)
+
+                # Common data
+                files.append('data/vel_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                files.append('data/velTmp_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+
+                if ds.domain_type == 'FLUID':
+                    # For some reason openvdb is not saving these files
+                    if ds.cache_data_format != 'OPENVDB':
+                        # Particle Data
+                        files.append('data/pp_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                        # Particle Velocity
+                        files.append('data/pVel_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                elif ds.domain_type == 'GAS':
+                    files.append('data/density_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                    files.append('data/shadow_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                    files.append('data/heat_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+                    #if fire:
+                    #    files.append('data/flame_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+
+                if ds.use_spray_particles or ds.use_foam_particles or ds.use_bubble_particles:
+                    # If Spray is set
+                    files.append('particles/ppSnd_%04d.%s' % (scene.frame_current, _fmt(ds.cache_particle_format)))
+                    files.append('particles/pVelSnd_%04d.%s' % (scene.frame_current, _fmt(ds.cache_particle_format)))
+                    files.append('particles/pLifeSnd_%04d.%s' % (scene.frame_current, _fmt(ds.cache_particle_format)))
+
+                if ds.use_mesh:
+                    # If Mesh is set
+                    files.append('mesh/lMesh_%04d.%s' % (scene.frame_current, _fmt(ds.cache_mesh_format)))
+                    # For some reason openvdb is not saving this file
+                    if ds.use_speed_vectors and ds.cache_data_format != 'OPENVDB':
+                        files.append('mesh/lVelMesh_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+
+                if ds.use_guide:
+                    # If Guides is set
+                    files.append('guiding/guidevel_%04d.%s' % (scene.frame_current, _fmt(ds.cache_data_format)))
+
+                if ds.use_noise:
+                    # If Noise is set
+                    files.append('noise/density_noise_%04d.%s' % (scene.frame_current, _fmt(ds.cache_noise_format)))
+                    #if fire:
+                    #   files.append('noise/flame_noise_%04d.%s' % (scene.frame_current, _fmt(ds.cache_noise_format)))
+
+                for f in files:
+                    cpath = os.path.join(cachedir, f)
+                    if not os.path.isfile(os.path.join(localdir, cpath)):
+                        print('ERROR: Unable to locate fluid cache file '
+                              '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
+                        bad.add(cpath)
+                    else:
+                        good.add(cpath)
+
+                # Some settings are attached to other objects (like flow for fire/smoke)
+                # so it's hard to determine right now, let's use just glob to find related
+                import glob
+                files_additional = glob.glob(os.path.join(localdir, cachedir, '**/*_%04d.*' % scene.frame_current), recursive=True)
+                for f in files_additional:
+                    cpath = f.replace(localdir, '')
+                    if cpath not in files:
+                        print('INFO: Found additional fluid cache file to upload: %s' % (cpath,))
+                        good.add(cpath)
+
+                continue
+
+            elif mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
+                # Deprecated: < 2.82
                 cachedir = os.path.realpath(bpy.path.abspath(mod.settings.filepath)).replace(localdir, '', 1)
                 if not os.path.isdir(os.path.join(localdir, cachedir)):
-                    print('ERROR: Not a relative/not existing path of the cachedir "%s" for object modifier %s --> %s' % (mod.settings.filepath, o.name, mod.name))
+                    print('ERROR: Not a relative/not existing path of the cachedir '
+                          '"%s" for object modifier %s --> %s' % (mod.settings.filepath, o.name, mod.name))
                     bad.add(mod.settings.filepath)
                     continue
 
@@ -79,12 +169,14 @@ def getCaches():
                 for f in files:
                     cpath = os.path.join(cachedir, f)
                     if not os.path.isfile(os.path.join(localdir, cpath)):
-                        print('ERROR: Unable to locate fluid cache file "%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
+                        print('ERROR: Unable to locate fluid sim cache file '
+                              '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
                         bad.add(cpath)
                     else:
                         good.add(cpath)
                 continue
             elif mod.type == 'SMOKE':
+                # Deprecated: < 2.82
                 if mod.smoke_type != 'DOMAIN':
                     continue
                 ext = '.vdb' if mod.domain_settings.cache_file_format == 'OPENVDB' else '.bphys'
@@ -117,7 +209,8 @@ def getCaches():
 
                 cpath = os.path.join(pointcache_dir, fname)
                 if not os.path.isfile(os.path.join(localdir, cpath)):
-                    print('ERROR: Unable to locate pointcache file "%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
+                    print('ERROR: Unable to locate pointcache file '
+                          '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
                     bad.add(cpath)
                 else:
                     good.add(cpath)
