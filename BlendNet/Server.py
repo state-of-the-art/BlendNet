@@ -36,7 +36,7 @@ class Processor(SimpleREST.ProcessorBase):
         # If running in blender - show it's info
         try:
             import bpy
-            out['blender'] = {
+            out['data']['blender'] = {
                 'version': bpy.app.version,
                 'version_string': str(bpy.app.version_string),
                 'build_date': bpy.app.build_date.decode('utf-8'),

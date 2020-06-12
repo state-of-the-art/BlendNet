@@ -331,6 +331,7 @@ def getManagerInfo():
     if manager_info_timer:
         manager_info_timer.cancel()
 
+    print('DEBUG: Periodic update manager info')
     info = ManagerClient(getManagerIP(), getConfig()).info()
     manager_info_cache[0] = info or {}
     manager_info_cache[1] = int(time.time())

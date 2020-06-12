@@ -923,12 +923,27 @@ class BlendNetManagerPanel(bpy.types.Panel):
 
         manager_info = BlendNet.addon.getResources(context).get('manager')
         if manager_info:
-            layout.label(text='Manager info:')
+            layout.label(text='Manager instance:')
             box = layout.box()
             for key, value in manager_info.items():
                 split = box.split(factor=0.3)
                 split.label(text=key)
                 split.label(text=str(value))
+
+        if BlendNet.addon.isManagerActive():
+            info = BlendNet.addon.requestManagerInfo(context)
+            if info:
+                layout.label(text='Manager info:')
+                box = layout.box()
+                blender_version = info.get('blender', {}).get('version_string')
+                if blender_version:
+                    split = box.split(factor=0.3)
+                    split.label(text='blender')
+                    split.label(text=blender_version)
+                for key, value in info.get('platform', {}).items():
+                    split = box.split(factor=0.3)
+                    split.label(text=key)
+                    split.label(text=str(value))
 
 class BlendNetAgentsPanel(bpy.types.Panel):
     bl_idname = 'RENDER_PT_blendnet_agents'
