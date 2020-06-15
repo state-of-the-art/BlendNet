@@ -132,7 +132,7 @@ class ClientEngine:
                     return None
             except:
                 import sys
-                print('ERROR: Communication exception - check the remote service for errors "%s": %s' % (req.full_url, sys.exc_info()[0]))
+                print('ERROR: Communication exception - check the remote service for errors "%s": %s' % (req.full_url, sys.exc_info()))
                 return None
 
             print('INFO: Retry request "%s" in 1 sec' % req.full_url)
@@ -165,6 +165,8 @@ class ClientEngine:
             try:
                 sha1_calc = hashlib.sha1()
                 size_left = size
+                # Create the required directory to store the file
+                os.makedirs(os.path.dirname(req._out_path), 0o750, True)
                 with open(req._out_path, 'wb') as f:
                     for chunk in iter(lambda: res.read(min(1048576, size_left)), b''):
                         sha1_calc.update(chunk)
