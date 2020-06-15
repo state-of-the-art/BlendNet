@@ -295,7 +295,6 @@ def updateManagerTasks():
         if not item.received and task.get('state') == 'COMPLETED':
             # TODO: make possible to use ### in the out path to save result using frame number
             out_path = bpy.path.abspath(bpy.context.scene.render.filepath)
-            os.makedirs(out_path, 0o755, True)
             out_file = os.path.join(out_path, '%s.exr' % task_name)
             result = True
             checksum = None

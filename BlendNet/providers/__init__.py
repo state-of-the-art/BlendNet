@@ -61,7 +61,7 @@ def _execProviderFunc(func, default = {}, *args, **kwargs):
         return getattr(modules[selected_provider], func)(*args, **kwargs)
     except:
         import sys
-        print('WARN: Catched exception from "%s" provider execution of %s: %s' % (selected_provider, func, sys.exc_info()[0]))
+        print('WARN: Catched exception from "%s" provider execution of %s: %s' % (selected_provider, func, sys.exc_info()))
         return default
 
 def getProviderInfo():
