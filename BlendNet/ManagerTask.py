@@ -314,22 +314,20 @@ class ManagerTask(TaskBase):
             # Updating the task left samples
             self.statusSamplesDoneSet(sum([ t.get('samples_done') for t in self._execution_status.values() ]))
 
-            # Calculate the task remaining
-            # TODO: prepare fixes - right now it's not good at all
+            # Calculate the task remaining time
             time_per_sample = []
-            min_start_time = time.time()
             for task, status in self._execution_status.items():
                 if not (status.get('start_time') and status.get('samples')):
                     continue
-                min_start_time = min(min_start_time, status['start_time'])
-                if status.get('end_time'): # That's simple
+                if status.get('end_time'):
+                    # Simple calculation based on start and end time
                     time_per_sample.append((status['end_time'] - status['start_time']) / status['samples'])
-                elif status.get('remaining') and status.get('samples_done'): # Slightly harder
-                    prelim_end_time = status['_requested_time'] + status['remaining']
-                    time_per_sample.append((prelim_end_time - status['start_time']) / status['samples_done'])
+                elif status.get('remaining') and status.get('samples_done'):
+                    # Calculating time per sample based on task remaining time and left samples to render
+                    prelim_render_time = status['_requested_time'] + status['remaining'] - status['start_time']
+                    time_per_sample.append(prelim_render_time / status['samples'])
             if time_per_sample:
-                calc_time = statistics.median(time_per_sample) * self._cfg.samples
-                remaining = (min_start_time - time.time() + calc_time) / self._cfg.agents_num
+                remaining = statistics.median(time_per_sample) * (self._cfg.samples - self._status['samples_done'])
                 self.statusRemainingSet(int(remaining))
 
             # Check if all the samples was processed and tasks completed
