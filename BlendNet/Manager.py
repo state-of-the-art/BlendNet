@@ -36,6 +36,11 @@ class ManagerConfig(TaskExecutorConfig):
             'type': str,
             'default': lambda cfg: providers.getAgentSizeDefault(),
         }
+        self._defs['agent_use_cheap_instance'] = {
+            'description': '''Use cheap VMs (preemptible, spot...) to save money''',
+            'type': bool,
+            'default': True,
+        }
         self._defs['agent_listen_host'] = {
             'description': '''Agent listen host - ip address or name''',
             'type': str,
@@ -119,6 +124,7 @@ class Manager(providers.Manager, TaskExecutorBase):
             'dist_checksum': self._cfg.dist_checksum,
             'bucket': self._cfg.bucket,
             'instance_type': self._cfg.agent_instance_type,
+            'use_cheap_instance': self._cfg.agent_use_cheap_instance,
             'listen_host': self._cfg.agent_listen_host,
             'listen_port': self._cfg.agent_listen_port,
             'auth_user': self._cfg.agent_auth_user,

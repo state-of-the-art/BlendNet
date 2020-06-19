@@ -117,6 +117,12 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'manager_password'),
     )
 
+    agent_use_cheap_instance: BoolProperty(
+        name = 'Use cheap VM',
+        description = 'Use cheap instances to save money',
+        default = True,
+    )
+
     agent_port: IntProperty(
         name = 'Port',
         description = 'TLS tcp port to communicate Manager with Agent service',
@@ -205,6 +211,10 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             box_box = box.box()
             box_box.label(text='Agent')
             row = box_box.row()
+            row.prop(self, 'agent_use_cheap_instance')
+            if 'Cheap instances not available' in provider_info.get('ERRORS', []):
+                row.enabled = False
+            row = box_box.row()
             row.prop(self, 'agent_port')
             row = box_box.row()
             row.prop(self, 'agent_user')
@@ -231,6 +241,7 @@ class BlendNetSceneSettings(bpy.types.PropertyGroup):
         description = 'Selected agent instance size',
         items = BlendNet.addon.fillAvailableInstanceTypesAgent,
     )
+
 
     @classmethod
     def register(cl):
@@ -884,6 +895,8 @@ class BlendNetRenderPanel(bpy.types.Panel):
         row = box.row()
         row.label(text='BlendNet Render')
         row.label(text=context.window_manager.blendnet.status)
+        if not bpy.context.preferences.addons[__package__].preferences.agent_use_cheap_instance:
+            box.label(text='WARN: No cheap VMs available, check addon settings', icon='ERROR')
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
             row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL').is_animation = False
@@ -1108,6 +1121,10 @@ def initPreferences():
         prefs.agent_password_hidden = ''
 
     BlendNet.addon.fillAvailableBlenderDists()
+
+    # Getting provider info to make sure all the settings are ok
+    # for current provider configuration
+    BlendNet.addon.getProviderInfo()
 
 def register():
     bpy.utils.register_class(BlendNetAddonPreferences)
