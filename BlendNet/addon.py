@@ -98,6 +98,7 @@ def getConfig():
 
     cfg['agents_max'] = bn.manager_agents_max
     cfg['agent_instance_type'] = bn.manager_agent_instance_type
+    cfg['agent_use_cheap_instance'] = prefs.agent_use_cheap_instance
     cfg['agent_listen_port'] = prefs.agent_port
     cfg['agent_auth_user'] = prefs.agent_user
     cfg['agent_auth_password'] = prefs.agent_password_hidden
@@ -133,7 +134,7 @@ def getAddonDefaultProvider():
 
 provider_info_cache = [{}, '', 0]
 
-def getProviderInfo(context):
+def getProviderInfo(context = None):
     '''Cached provider info for the UI interface'''
     # TODO: Not multithread for now - need to add locks
 
@@ -150,7 +151,7 @@ def getProviderInfo(context):
     if info[1] != getProvider() or int(time.time())-30 > info[2]:
         provider_info_cache[1] = getProvider()
         provider_info_cache[2] = time.time()
-        _runBackgroundWork(worker, getProvider(), context.area)
+        _runBackgroundWork(worker, getProvider(), context.area if context else None)
 
     return info[0]
 

@@ -150,13 +150,17 @@ def _getInstanceTypeInfo(name):
     return None
 
 def _verifyQuotas(avail):
-    import bpy
+    try:
+        import bpy
+    except:
+        return []
 
     errors = []
 
     manager_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_instance_type)
     agents_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_agent_instance_type)
     agents_num = bpy.context.scene.blendnet.manager_agents_max
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
 
     # Manager
     if manager_info:
@@ -171,10 +175,24 @@ def _verifyQuotas(avail):
     else:
         errors.append('Unable to get the manager type info to validate quotas')
 
+    # Disable cheap instances if preemptible cpus is not available
+    if avail['region']['PREEMPTIBLE_CPUS'] < 1:
+        errors.append('PREEMPTIBLE_CPUS is zero - cheap instances disabled')
+        # TODO: Unify validation between providers
+        # Required to get UI element disabled
+        errors.append('Cheap instances not available')
+        prefs.agent_use_cheap_instance = False
+
     # Agents
     if agents_info:
-        if avail['region']['PREEMPTIBLE_CPUS'] < agents_info['cpu']*agents_num:
-            errors.append('Available region PREEMPTIBLE_CPUS is too small to provision the agents')
+        if prefs.agent_use_cheap_instance:
+            if avail['region']['PREEMPTIBLE_CPUS'] < agents_info['cpu'] * agents_num:
+                errors.append('Available region PREEMPTIBLE_CPUS is too small to provision the agents')
+        else:
+            if avail['project']['CPUS_ALL_REGIONS'] < agents_info['cpu'] * agents_num + manager_info['cpu']:
+                errors.append('Available project CPUS_ALL_REGIONS is too small to provision the agents')
+            if avail['region']['CPUS'] < agents_info['cpu'] * agents_num + manager_info['cpu']:
+                errors.append('Available region CPUS is too small to provision the agents')
     else:
         errors.append('Unable to get the agents type info to validate quotas')
 
@@ -186,7 +204,7 @@ def _verifyQuotas(avail):
         errors.append('Unable to get the manager and agents type info to validate quotas')
 
     if errors:
-        errors.append('Please edit the project quotas and request some')
+        errors.append('You can request GCP project quotas increase to get better experience')
 
     return errors
 
@@ -225,7 +243,7 @@ def getProviderInfo():
             configs['ERRORS'] = errors
     except Exception as e:
         configs['ERRORS'] = ['Looks like access to the compute API is restricted '
-                              '- please check your permissions: %s' % e]
+                             '- please check your permissions: %s' % e]
 
     return configs
 
@@ -447,7 +465,7 @@ systemctl start blendnet-agent.service # We don't need "enable" here
         'minCpuPlatform': 'Intel Skylake', # Using the best option
         'description': 'BlendNet Agent worker',
         'scheduling': {
-            'preemptible': True,
+            'preemptible': cfg['use_cheap_instance'],
         },
         'labels': {
             'app': 'blendnet',
@@ -609,7 +627,7 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     body = {
         'name': dest_path or path,
     }
-    
+
     # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
     if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
@@ -632,7 +650,7 @@ def uploadDataToBucket(data, bucket_name, dest_path):
     body = {
         'name': dest_path,
     }
-    
+
     # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
     if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
