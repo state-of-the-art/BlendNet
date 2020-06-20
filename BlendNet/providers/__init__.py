@@ -10,7 +10,11 @@ with os.scandir(os.path.dirname(__file__)) as it:
         if not entry.is_dir() or entry.name.startswith('__'):
             continue
         print('INFO: Found provider "%s"' % entry.name)
-        modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
+        try:
+            modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
+        except Exception as e:
+            print('WARN: Unable to load "%s" provider due to init error: %s' % (entry.name, e))
+            modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
 
 __all__ = [
     'Manager',
@@ -27,7 +31,7 @@ def selectProvider(provider):
     selected_provider = provider
 
 for name, module in modules.items():
-    if name != 'local' and module.checkLocation():
+    if name != 'local' and not isinstance(module, str) and module.checkLocation():
         print('INFO: Importing manager/agent from "%s" provider' % name)
         global Manager, Agent
         Manager = importlib.import_module('.Manager', '%s.%s' % (__package__, name)).Manager
@@ -43,6 +47,9 @@ def getProvidersDoc():
     '''Return map with {ident: (name, desc), ...} of the providers'''
     out = {}
     for ident, module in modules.items():
+        if isinstance(module, str):
+            out[ident] = (ident, module)
+            continue
         name, desc = module.__doc__.split('\n', 1)
         out[ident] = (name.strip(), desc.strip())
 
@@ -50,9 +57,8 @@ def getProvidersDoc():
 
 def getGoodProvidersList():
     '''Return a list with provider identifiers if their deps are ok'''
-    return [name
-            for name, module in modules.items()
-            if name != 'local' and module.checkDependencies()] + ['local']
+    return [name for name, module in modules.items()
+            if name != 'local' and not isinstance(module, str) and module.checkDependencies()] + ['local']
 
 def _execProviderFunc(func, default = {}, *args, **kwargs):
     if not hasattr(modules[selected_provider], func):

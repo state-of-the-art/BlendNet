@@ -127,9 +127,18 @@ def getProvidersEnumItems():
     docs = providers.getProvidersDoc()
     return [(i, d[0], d[1]) for i, d in docs.items()]
 
+def getProviderDocs(provider):
+    '''Return the available providers list of tuples with ident, name and description for enumproperty items'''
+    docs = providers.getProvidersDoc()
+    return docs.get(provider, (provider, 'No documentation provided'))[1]
+
 def getAddonDefaultProvider():
     '''Will find the first available provider for addon and return its name'''
     return providers.getGoodProvidersList()[0]
+
+def checkProviderIsGood(provider):
+    '''Make sure current choosen provider is good enough'''
+    return provider in providers.getGoodProvidersList()
 
 
 provider_info_cache = [{}, '', 0]

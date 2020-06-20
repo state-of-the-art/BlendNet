@@ -167,6 +167,10 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         # Cloud provider
         box = layout.box()
         box.prop(self, 'cloud_provider')
+        if not BlendNet.addon.checkProviderIsGood(self.cloud_provider):
+            err = BlendNet.addon.getProviderDocs(self.cloud_provider).split('\n')
+            for line in err:
+                box.label(text=line.strip(), icon='ERROR')
         box = box.box()
         box.label(text='Collected cloud info:')
 
@@ -893,10 +897,12 @@ class BlendNetRenderPanel(bpy.types.Panel):
 
         box = layout.box()
         row = box.row()
-        row.label(text='BlendNet Render')
+        row.label(text='BlendNet Render (%s)' % (prefs.cloud_provider,))
         row.label(text=context.window_manager.blendnet.status)
-        if not bpy.context.preferences.addons[__package__].preferences.agent_use_cheap_instance:
+        if not prefs.agent_use_cheap_instance:
             box.label(text='WARN: No cheap VMs available, check addon settings', icon='ERROR')
+        if not BlendNet.addon.checkProviderIsGood(prefs.cloud_provider):
+            box.label(text='ERROR: Provider init failed, check addon settings', icon='ERROR')
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
             row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL').is_animation = False
