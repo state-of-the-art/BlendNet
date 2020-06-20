@@ -48,7 +48,7 @@ def getProvidersDoc():
     out = {}
     for ident, module in modules.items():
         if isinstance(module, str):
-            out[ident] = (ident, module)
+            out[ident] = (ident + ' - ERROR: unable to initialize', module)
             continue
         name, desc = module.__doc__.split('\n', 1)
         out[ident] = (name.strip(), desc.strip())
