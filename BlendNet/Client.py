@@ -7,6 +7,7 @@ Description: REST client
 
 import os
 import time
+import ssl
 import json # Used to parse response
 import urllib # To request API
 import hashlib
@@ -80,7 +81,6 @@ class ClientEngine:
         self._initSSL()
 
     def _initSSL(self):
-        import ssl
         self._context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         self._context.check_hostname = False
         self._ca = None
@@ -121,7 +121,7 @@ class ClientEngine:
             except urllib.error.HTTPError as e:
                 print('WARN: Communication issue with request to "%s": HTTP %d %s: %s' % (req.full_url, e.getcode(), e.reason, e.read(1024)))
             except urllib.error.URLError as e:
-                if 'CERTIFICATE_VERIFY_FAILED' in str(e.reason):
+                if 'CERTIFICATE_VERIFY_FAILED' in str(e.reason) or 'handshake' in str(e.reason):
                     print('WARN: Seems like wrong (or old) CA is loaded, reinit SSL context and repeat.')
                     self._initSSL()
                 else:

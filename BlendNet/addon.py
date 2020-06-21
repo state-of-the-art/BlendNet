@@ -9,6 +9,7 @@ import time
 import threading
 import hashlib
 import ssl
+import site
 from urllib.request import urlopen
 from html.parser import HTMLParser
 
@@ -530,19 +531,16 @@ def fillAvailableBlenderDists(scene = None, context = None):
         ]
 
         ctx = ssl.create_default_context()
+        print('INFO: Search for blender embedded certificates...')
+        for path in site.getsitepackages():
+            path = os.path.join(path, 'certifi', 'cacert.pem')
+            if not os.path.exists(path):
+                continue
+            ctx.load_verify_locations(cafile=path)
+            print('INFO: found certifi certificates: %s' % (path,))
+            break
+
         if len(ctx.get_ca_certs()) == 0:
-            print('WARN: no ssl cacerts found, trying to locate...')
-            import site
-            for path in site.getsitepackages():
-                path = os.path.join(path, 'certifi', 'cacert.pem')
-                if not os.path.exists(path):
-                    print('DEBUG: no cert file:', path)
-                    continue
-                ctx.load_verify_locations(cafile=path)
-                break
-        if len(ctx.get_ca_certs()):
-            print('INFO: found certifi certificates')
-        else:
             print('WARN: certificates not found - skip certs verification')
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE

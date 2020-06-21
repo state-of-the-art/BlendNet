@@ -5,8 +5,8 @@
 Description: Useful functions to get info about the loaded blend file
 '''
 
-import os
 import bpy
+from pathlib import Path
 
 def getDependencies():
     '''Will return good and bad set of file dependencies'''
@@ -23,19 +23,19 @@ def getImages():
     good = set()
     bad = set()
 
-    localdir = bpy.path.abspath('//')
+    localdir = Path(bpy.path.abspath('//'))
     for i in bpy.data.images:
         if i.packed_file or i.source != 'FILE':
             continue
 
-        path = os.path.realpath(bpy.path.abspath(i.filepath)).replace(localdir, '', 1)
+        path = Path(bpy.path.abspath(i.filepath)).relative_to(localdir)
 
-        if not os.path.isfile(os.path.join(localdir, path)):
+        if not (localdir / path).is_file():
             print('ERROR: Unable to find image: "%s"' % i.filepath)
             bad.add(i.filepath)
         else:
-            good.add(path)
-            i.filepath = '//'+path
+            good.add(path.as_posix())
+            i.filepath = '//' + path.as_posix()
 
     return good, bad
 
@@ -46,8 +46,8 @@ def getCaches():
     good = set()
     bad = set()
 
-    localdir = bpy.path.abspath('//')
-    pointcache_dir = 'blendcache_%s' % os.path.basename(bpy.data.filepath)[:-6]
+    localdir = Path(bpy.path.abspath('//'))
+    pointcache_dir = 'blendcache_' + Path(bpy.data.filepath).name.rsplit('.', 1)[0]
     for o in bpy.data.objects:
         if not o.visible_get():
             continue
@@ -57,14 +57,14 @@ def getCaches():
 
             if mod.type == 'FLUID' and mod.fluid_type == 'DOMAIN':
                 # New mantaflow added in 2.82
-                cachedir = os.path.realpath(bpy.path.abspath(mod.domain_settings.cache_directory)).replace(localdir, '', 1)
-                if not os.path.isdir(os.path.join(localdir, cachedir)):
+                cachedir = Path(bpy.path.abspath(mod.domain_settings.cache_directory)).relative_to(localdir)
+                if not (localdir / cachedir).is_dir():
                     print('ERROR: Not a relative/not existing path of the cachedir '
                           '"%s" for object modifier %s --> %s' % (mod.domain_settings.cache_directory, o.name, mod.name))
-                    bad.add(mod.settings.filepath)
+                    bad.add(mod.domain_settings.filepath)
                     continue
 
-                mod.domain_settings.cache_directory = '//'+cachedir
+                mod.domain_settings.cache_directory = '//' + cachedir.as_posix()
 
                 def _fmt(ext_type):
                     return {
@@ -123,36 +123,35 @@ def getCaches():
                     #   files.append('noise/flame_noise_%04d.%s' % (scene.frame_current, _fmt(ds.cache_noise_format)))
 
                 for f in files:
-                    cpath = os.path.join(cachedir, f)
-                    if not os.path.isfile(os.path.join(localdir, cpath)):
+                    cpath = cachedir / f
+                    if not (localdir / cpath).is_file():
                         print('ERROR: Unable to locate fluid cache file '
                               '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
-                        bad.add(cpath)
+                        bad.add(cpath.as_posix())
                     else:
-                        good.add(cpath)
+                        good.add(cpath.as_posix())
 
                 # Some settings are attached to other objects (like flow for fire/smoke)
                 # so it's hard to determine right now, let's use just glob to find related
-                import glob
-                files_additional = glob.glob(os.path.join(localdir, cachedir, '**/*_%04d.*' % scene.frame_current), recursive=True)
+                files_additional = (localdir / cachedir).glob('**/*_%04d.*' % scene.frame_current)
                 for f in files_additional:
-                    cpath = f.replace(localdir, '')
-                    if cpath not in files:
-                        print('INFO: Found additional fluid cache file to upload: %s' % (cpath,))
-                        good.add(cpath)
+                    cpath = f.relative_to(localdir)
+                    if cpath.as_posix() not in files:
+                        print('INFO: Found an additional fluid cache file to upload: %s' % (cpath.as_posix(),))
+                        good.add(cpath.as_posix())
 
                 continue
 
             elif mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
                 # Deprecated: < 2.82
-                cachedir = os.path.realpath(bpy.path.abspath(mod.settings.filepath)).replace(localdir, '', 1)
-                if not os.path.isdir(os.path.join(localdir, cachedir)):
+                cachedir = Path(bpy.path.abspath(mod.settings.filepath)).relative_to(localdir)
+                if not (localdir / cachedir).is_dir():
                     print('ERROR: Not a relative/not existing path of the cachedir '
                           '"%s" for object modifier %s --> %s' % (mod.settings.filepath, o.name, mod.name))
                     bad.add(mod.settings.filepath)
                     continue
 
-                mod.settings.filepath = '//'+cachedir
+                mod.settings.filepath = '//' + cachedir.as_posix()
 
                 files = None
                 if mod.settings.type == 'DOMAIN':
@@ -167,16 +166,16 @@ def getCaches():
                 else:
                     continue
                 for f in files:
-                    cpath = os.path.join(cachedir, f)
-                    if not os.path.isfile(os.path.join(localdir, cpath)):
+                    cpath = cachedir / f
+                    if not (localdir / cpath).is_file():
                         print('ERROR: Unable to locate fluid sim cache file '
-                              '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
-                        bad.add(cpath)
+                              '"%s" for object modifier %s --> %s' % (cpath.to_posix(), o.name, mod.name))
+                        bad.add(cpath.to_posix())
                     else:
-                        good.add(cpath)
+                        good.add(cpath.to_posix())
                 continue
             elif mod.type == 'SMOKE':
-                # Deprecated: < 2.82
+                # Deprecated in >= 2.82
                 if mod.smoke_type != 'DOMAIN':
                     continue
                 ext = '.vdb' if mod.domain_settings.cache_file_format == 'OPENVDB' else '.bphys'
@@ -207,12 +206,12 @@ def getCaches():
                 else:
                     fname = '%s_%06d%s' % (fname, scene.frame_current, ext)
 
-                cpath = os.path.join(pointcache_dir, fname)
-                if not os.path.isfile(os.path.join(localdir, cpath)):
+                cpath = Path(pointcache_dir) / fname
+                if not (localdir / cpath).is_file():
                     print('ERROR: Unable to locate pointcache file '
-                          '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
-                    bad.add(cpath)
+                          '"%s" for object modifier %s --> %s' % (cpath.as_posix(), o.name, mod.name))
+                    bad.add(cpath.as_posix())
                 else:
-                    good.add(cpath)
+                    good.add(cpath.as_posix())
 
     return good, bad
