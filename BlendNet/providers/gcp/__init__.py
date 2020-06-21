@@ -727,7 +727,7 @@ def getManagerSizeDefault():
     return 'n1-standard-1'
 
 def getAgentSizeDefault():
-    return 'n1-highcpu-16'
+    return 'n1-highcpu-2'
 
 def getBucketName(session_id):
     '''Returns the appropriate bucket name'''
