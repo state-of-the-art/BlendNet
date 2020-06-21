@@ -11,7 +11,7 @@ Please check out the wiki page: [Wiki](https://github.com/state-of-the-art/Blend
 
 ## Requirements
 
-* Blender 2.80 - as a host for the Addon
+* Blender >= 2.80 - as a host for the Addon
 * If you have a plan to use a cloud provider:
     * Google Cloud Platform (GCP)
         * Installed `Google Cloud SDK`
@@ -223,11 +223,16 @@ can see the issues:
 
 ### Addon configuration
 
-Addon is using provider's tools to for configuration. So check that your provider tool is available
+Addon is using a provider tools for its configuration. So check that your provider tool is available
 in your PATH and working correctly: you should be able to create an instance and bucket in the
 default project using the provider tool.
 
 For example: To work with GCP and properly run the instances - you need a fresh `google cloud sdk`:
+* Command `gcloud init` will allow to initialize the configuration the first time
+* Comamnd `gcloud compute regions list` will show the available regions
+* Command `gcloud config set compute/region us-central1` will set the region to "us-central1"
+* Comamnd `gcloud compute zones list` will show the available regions
+* Command `gcloud config set compute/zone us-central1-f` will set the zone to "us-central1-f"
 * Command `gcloud info` should print out where sdk is installed
 * Command `gcloud auth list` should show the currently selected account
 * Command `gcloud compute instances create test-instance` should actually create a new instance (you

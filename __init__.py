@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'BlendNet - distributed cloud render',
     'author': 'www.state-of-the-art.io',
-    'version': (0, 1, 0),
+    'version': (0, 2, 0),
     'blender': (2, 80, 0),
     'location': 'Properties --> Render --> BlendNet Render',
     'description': 'Allows to easy allocate resources in cloud and '
@@ -10,7 +10,6 @@ bl_info = {
     'wiki_url': 'https://github.com/state-of-the-art/BlendNet/wiki',
     'tracker_url': 'https://github.com/state-of-the-art/BlendNet/issues',
     'category': 'Render',
-    'warning': 'Experimental release',
 }
 
 if 'bpy' in locals():
