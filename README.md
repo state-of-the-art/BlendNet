@@ -229,11 +229,11 @@ default project using the provider tool.
 
 For example: To work with GCP and properly run the instances - you need a fresh `google cloud sdk`:
 * Command `gcloud init` will allow to initialize the configuration the first time
-* Comamnd `gcloud compute regions list` will show the available regions
+* Comamad `gcloud compute regions list` will show the available regions
 * Command `gcloud config set compute/region us-central1` will set the region to "us-central1"
-* Comamnd `gcloud compute zones list` will show the available regions
+* Comamad `gcloud compute zones list` will show the available regions
 * Command `gcloud config set compute/zone us-central1-f` will set the zone to "us-central1-f"
-* Command `gcloud info` should print out where sdk is installed
+* Command `gcloud info` should print out where SDK is installed
 * Command `gcloud auth list` should show the currently selected account
 * Command `gcloud compute instances create test-instance` should actually create a new instance (you
 can check that using google cloud web console at https://console.cloud.google.com/compute/instances)
@@ -241,7 +241,7 @@ can check that using google cloud web console at https://console.cloud.google.co
 * Command `gsutil mb gs://test-bucket-jsfkhbqfhbqw` should create a test bucket
 * Command `gsutil rm -r gs://test-bucket-jsfkhbqfhbqw` should clean and delete the test bucket
 
-Of course it's just an example  - but in general case those commands should work for you.
+Of course, it's just an example  - but in general case, those commands should work for you.
 
 ### Manager instance provisioning
 
@@ -260,7 +260,7 @@ on the external IP. So make sure that the rule was created by the Addon properly
 
 ### Advanced users
 
-Check the blender stdout - run it using console and you will see some debug messages from BlendNet.
+Check the Blender stdout - run it using console and you will see some debug messages from BlendNet.
 If blender is started without a console to check stdout - just restart it from console and try to
 reproduce your steps to see additional information about the issue.
 
