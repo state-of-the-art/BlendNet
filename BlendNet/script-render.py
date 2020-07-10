@@ -92,7 +92,7 @@ eprint('INFO: Checking existance of the dependencies')
 blend_file.getDependencies()
 
 class Commands:
-    def savePreview():
+    def savePreview(cls):
         scene.render.image_settings.file_format = 'OPEN_EXR'
         scene.render.image_settings.color_mode = 'RGB'
         scene.render.image_settings.color_depth = '32'
@@ -100,7 +100,7 @@ class Commands:
         bpy.data.images['Render Result'].save_render('_preview.exr')
         os.rename('_preview.exr', 'preview.exr')
 
-    def saveRender():
+    def saveRender(cls):
         scene.render.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
         scene.render.image_settings.color_mode = 'RGBA'
         scene.render.image_settings.color_depth = '32'

@@ -10,6 +10,8 @@ import threading
 import hashlib
 import ssl
 import site
+import random
+import string
 from urllib.request import urlopen
 from html.parser import HTMLParser
 
@@ -50,13 +52,11 @@ def hidePassword(obj, prop):
 
 def passAlphanumString(val):
     '''Generates random string from letters and digits'''
-    import string
     allowed = string.ascii_letters + string.digits
     return ''.join([l for l in val if l in allowed])
 
 def genRandomString(num = 6):
     '''Removing all the bad chars from the string and leaving only alphanum chars'''
-    import random, string
     return ''.join([random.choice(string.ascii_letters + string.digits) for n in range(num)])
 
 def genPassword(obj, prop, num = 64):
@@ -68,8 +68,6 @@ def genPassword(obj, prop, num = 64):
 
 def genSID(obj, prop, num = 6):
     '''Generates SID and set it to property'''
-
-    import random, string
     val = getattr(obj, prop)
     newval = ''
     if val == '':
@@ -439,7 +437,7 @@ def managerTaskUploadFiles(task, files_map):
         return
 
     global manager_task_upload_workers
-    if manager_task_upload_workers == None:
+    if manager_task_upload_workers is None:
         manager_task_upload_workers = Workers(
             'Uploading tasks files to Manager',
             8,
@@ -479,7 +477,7 @@ def managerDownloadTaskResults(task, result, path):
     '''Multithreading results download'''
 
     global manager_task_download_workers
-    if manager_task_download_workers == None:
+    if manager_task_download_workers is None:
         manager_task_download_workers = Workers(
             'Downloading files from Manager',
             8,
@@ -590,7 +588,6 @@ def fillAvailableBlenderDists(scene = None, context = None):
 
             except Exception as e:
                 print('WARN: unable to get mirror list for: %s %s' % (url, e))
-                pass
 
         keys = naturalSort(available_blender_dists_cache.keys())
         out = []
@@ -605,7 +602,7 @@ def fillAvailableBlenderDists(scene = None, context = None):
 
     global available_blender_dists_cache
     global available_blender_dists_cache_list
-    if available_blender_dists_cache == None:
+    if available_blender_dists_cache is None:
         available_blender_dists_cache = {}
         _runBackgroundWork(worker, context.area if context else None)
         return available_blender_dists_cache_list

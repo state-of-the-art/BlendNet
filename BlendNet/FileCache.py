@@ -13,7 +13,6 @@ import hashlib # Confirm sha1 hash of the blob
 import threading # Using locks for multi-threading streaming
 import shutil # Useful recursive dir remove feature
 import re # Used to clean bad symbols for tmp files
-import tempfile # To create workspaces
 
 class FileCache:
     def __init__(self, path = None, name = None):
@@ -25,7 +24,7 @@ class FileCache:
             name = self.__class__.__name__
 
         # Ensure tmp files will be ok
-        self._safe_pattern = re.compile('[\W_]+', re.UNICODE);
+        self._safe_pattern = re.compile('[\\W_]+', re.UNICODE)
 
         self._cache_dir = os.path.join(path, name)
         os.makedirs(self._cache_dir, 0o700, True)
@@ -124,7 +123,7 @@ class FileCache:
             return print('ERROR: Unable to serve stream of not existing blob "%s"' % sha1)
         return open(blob_path, 'rb')
 
-    def blobUpdate(self, sha1, data = {}):
+    def blobUpdate(self, sha1, data = dict()):
         '''Set data in the blob'''
         t = int(time.time())
         with self._blobs_map_lock:
@@ -157,7 +156,7 @@ class FileCache:
 
     def cleanOldCache(self, size = None):
         '''Clean old blobs to free `size` of cache space'''
-        print('INFO: Cleaning %s bytes of cache' % cur_req_space)
+        print('INFO: Cleaning %s bytes of cache' % size)
         oldest_blobs = None
         with self._blobs_map_lock:
             oldest_blobs = sorted([d.copy() for _, d in self._blobs_map.items() if 'id' in d], key=lambda v: v['access_time'])
@@ -227,10 +226,10 @@ class FileCache:
         received = self._receiveStream(stream, size, sha1)
         if not received:
             self.blobRemove(sha1)
-            return print('ERROR: Unable to read stream due to exception: %s' % e)
+            return print('ERROR: Unable to read stream')
 
         if sha1 != received[0]:
-            return print('WARN: Wrong sha1 sum for received stream "%s"' % sha1_calc.hexdigest())
+            return print('WARN: Wrong sha1 sum for received stream "%s"' % received[0])
 
         # Moving tmp file into the blobs directory
         blob_dir = os.path.join(self._blobs_dir, sha1[0:2])
@@ -258,7 +257,7 @@ class FileCache:
         with open(path, 'rb') as f:
             received = self._receiveStream(f, size, path)
         if not received:
-            return print('ERROR: Unable to read stream due to exception: %s' % e)
+            return print('ERROR: Unable to read stream')
 
         blob = self.blobUpdate(received[0])
         if 'id' in blob:

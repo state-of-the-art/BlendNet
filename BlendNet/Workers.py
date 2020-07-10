@@ -41,7 +41,7 @@ class Workers:
                     print('ERROR: Exception occurred during worker "%s" execution with data %s: %s' % (self._name, data, e))
                     result = e
 
-                if result != None:
+                if result is not None:
                     with self._tasks_lock:
                         self._tasks_failed.append(result)
 
@@ -74,7 +74,7 @@ class Workers:
 
         self._enabled = False
         for w in self._workers:
-            try: 
+            try:
                 w.join()
             except RuntimeError:
                 pass # If thread already was terminated

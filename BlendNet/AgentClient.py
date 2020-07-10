@@ -5,7 +5,6 @@
 Description: Agent REST client
 '''
 
-import json # Used to parse response
 from .Client import (
     Client,
     ClientEngine,

@@ -20,9 +20,9 @@ class ProcessorBase:
     def _initPathMethods(self):
         list_attrs = dir(self)
         for name in list_attrs:
-            m = getattr(self, name)
-            if callable(m) and hasattr(m, '_method'):
-                self._setPathMethod(m)
+            method = getattr(self, name)
+            if callable(method) and hasattr(method, '_method'):
+                self._setPathMethod(method)
 
     def _setPathMethod(self, func):
         print('Adding %s path "%s"' % (func._method.upper(), func._path))
@@ -110,7 +110,7 @@ def generateCA(name):
     '''Generates a new simple certification authority certificate and key'''
     if not os.path.exists('ca.key'):
         os.system('openssl req -newkey rsa:4096 -nodes -keyout ca.key '
-                  '-x509 -days 1024 -sha256 -out ca.crt -subj "/C=US/ST=N/L=N/O=N/OU=N/CN=%s-ca"' % name)
+                  '-x509 -days 1024 -sha256 -out ca.crt -subj "/C=US/ST=N/L=N/O=N/OU=N/CN={0}-ca"'.format(name))
 
 def generateCert(name, filename):
     '''Generates new simple certificate signed by CA'''
@@ -118,8 +118,8 @@ def generateCert(name, filename):
         generateCA(name)
         os.system('openssl req -newkey rsa:4096 -nodes -keyout "{1}.key" '
                   '-sha256 -subj "/C=US/ST=N/L=N/O=N/OU=N/CN={0}" -out "{1}.csr"'.format(name, filename))
-        os.system('openssl x509 -req -in "{1}.csr" -CA ca.crt -CAkey ca.key -CAcreateserial '
-                  '-out "{1}.crt" -days 512 -sha256'.format(name, filename))
+        os.system('openssl x509 -req -in "{0}.csr" -CA ca.crt -CAkey ca.key -CAcreateserial '
+                  '-out "{0}.crt" -days 512 -sha256'.format(filename))
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
     def send_response(self, code):

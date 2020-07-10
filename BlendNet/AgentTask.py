@@ -9,6 +9,7 @@ import os
 import time
 import signal
 import threading # To run stderr reading thread
+from subprocess import TimeoutExpired
 
 from .TaskBase import TaskConfig, TaskBase
 
@@ -183,9 +184,8 @@ class AgentTask(TaskBase):
             # Collecting the render statistics
             if l.startswith('Render statistics:'):
                 statistics = {}
-                cur = statistics
                 header = None
-                for line in iter(process.stdout.readline, b''):
+                for line in iter(process.stdout.readline, b''): # Redefined line intentionally
                     l = line.decode('utf-8').rstrip()
                     print(">std>> %s" % l)
 

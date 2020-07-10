@@ -13,8 +13,9 @@ import json # Used in the tasks save/load
 import hashlib # Calculate sha1 to find a task snapshot name
 from abc import ABC
 
+from . import providers
 from .Config import Config
-from .TaskBase import TaskConfig, TaskBase
+from .TaskBase import TaskBase
 from .FileCache import FileCache
 
 class TaskExecutorConfig(Config):
@@ -68,7 +69,6 @@ class TaskExecutorBase(ABC):
 
     def __init__(self, task_type, config):
         if not issubclass(task_type, TaskBase):
-            print(task_type, TaskBase)
             raise Exception('Unable use task type %s' % task_type)
         if not isinstance(config, TaskExecutorConfig):
             raise Exception('Unable to setup with configuration %s' % type(config))

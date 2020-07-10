@@ -5,10 +5,8 @@
 Description: Manager REST client
 '''
 
-import os, time
-import json # Used to parse response
+import os
 
-from . import providers
 from .Client import (
     Client,
     ClientEngine,
@@ -47,4 +45,3 @@ class ManagerClient(Client):
     def taskResultDownload(self, task, result, out_path):
         '''Will download result name (preview/render) into the file'''
         return self._engine.download('task/%s/status/result/%s' % (task, result), out_path)
-

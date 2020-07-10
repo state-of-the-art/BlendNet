@@ -92,13 +92,13 @@ class Processor(SimpleREST.ProcessorBase):
             return { 'success': False, 'message': 'Unable to find task' }
 
         sha1 = self._e.taskGet(parts[0]).fileGet(parts[1])
-        if not f:
-            return { 'success': False, 'message': 'Unable to find file "%s" for task "%s"' % (path, task) }
+        if not sha1:
+            return { 'success': False, 'message': 'Unable to find file "%s" for task "%s"' % (parts[1], parts[0]) }
 
         return { 'success': True, 'message': 'Got task file info',
             'data': {
-                'id': f,
-                'path': path,
+                'id': sha1,
+                'path': parts[1],
                 'blob': self._e.blobGet(sha1),
             },
         }
@@ -144,7 +144,7 @@ class Processor(SimpleREST.ProcessorBase):
             conf = json.loads(req.rfile.read(int(length)))
         except Exception as e:
             return { 'success': False, 'message': 'Error during parsing the json data: %s' % e }
-        
+
         if not self._e.taskGet(parts[0]).configsSet(conf):
             return { 'success': False, 'message': 'Error during task configuration' }
 

@@ -321,6 +321,7 @@ class ManagerAgentWorker:
         '''Requesting the task status from agent'''
         if self._client:
             return self._client.taskStatus(task_name)
+        return None
 
     def taskMessages(self, task_name):
         '''Requesting the task messages from agent'''
@@ -338,6 +339,7 @@ class ManagerAgentWorker:
         '''Stopping the task activity on the agent'''
         if self._client:
             return self._client.taskStop(task_name)
+        return None
 
     def requestPreviewDownload(self, task_name, callback):
         '''Put new request to download a current preview image from the agent task'''

@@ -143,7 +143,7 @@ def setupBucket(bucket_name, cfg):
 
     # Walk through python files and upload them
     dirpath = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    for root, dirs, files in os.walk(dirpath):
+    for root, _, files in os.walk(dirpath):
         for f in files:
             if not f.endswith('.py'):
                 continue

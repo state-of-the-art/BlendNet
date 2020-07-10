@@ -10,12 +10,12 @@ from . import providers
 from .TaskExecutorBase import TaskExecutorConfig, TaskExecutorBase
 
 class AgentConfig(TaskExecutorConfig):
-    def __init__(self, parent, init = {}):
+    def __init__(self, parent, init = dict()):
         self._defs['listen_port']['default'] = 9443
         self._defs['instance_name'] = {
             'description': '''Agent instance name''',
             'type': str,
-            'default': lambda cfg: providers.getAgentName(cfg.session_id),
+            'default': lambda cfg: providers.getAgentNamePrefix(cfg.session_id),
         }
         self._defs['instance_type'] = {
             'description': '''Agent instance type (size)''',

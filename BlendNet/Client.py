@@ -115,7 +115,7 @@ class ClientEngine:
 
     def _requestExecute(self, req, run_func):
         '''Executes the request'''
-        for repeat in range(3):
+        for _ in range(3):
             try:
                 return run_func(req)
             except urllib.error.HTTPError as e:

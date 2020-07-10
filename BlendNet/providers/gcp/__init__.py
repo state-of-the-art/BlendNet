@@ -41,10 +41,10 @@ def checkLocation():
     '''Returns True if it's the GCP environment'''
     global LOCATION
 
-    if LOCATION != None:
+    if LOCATION is not None:
         return LOCATION
 
-    LOCATION = _requestMetadata('') != None
+    LOCATION = _requestMetadata('') is not None
     return LOCATION
 
 def setGoogleCloudSdk(path):
@@ -83,7 +83,7 @@ def loadGoogleCloudSdk():
     _getCreds()
 
 def checkDependencies():
-    return GOOGLE_CLOUD_SDK_ROOT != None
+    return GOOGLE_CLOUD_SDK_ROOT is not None
 
 def _getCreds():
     if not GOOGLE_CLOUD_SDK_ROOT:
@@ -274,7 +274,7 @@ def _getInstance(instance_name):
     try:
         resp = compute.instances().get(project=configs['project'], zone=configs['zone'], instance=instance_name).execute()
         return resp
-    except Exception as e:
+    except Exception:
         return None
 
 def createInstanceManager(cfg):
@@ -595,7 +595,7 @@ def createFirewall(target_tag, port):
 
 def _getBucket(bucket_name):
     '''Returns info about bucket or None'''
-    storage, configs = _getStorage(), _getConfigs()
+    storage = _getStorage()
     try:
         # TODO: handle issues with api unavailable or something
         return storage.buckets().get(bucket=bucket_name).execute()
@@ -635,7 +635,7 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     print('INFO: Uploading file to "gs://%s/%s"...' % (bucket_name, body['name']))
     with open(path, 'rb') as f:
         # TODO: make sure file uploaded or there is an isssue
-        resp = storage.objects().insert(
+        storage.objects().insert(
             bucket=bucket_name, body=body,
             media_body=MediaIoBaseUpload(f, 'application/octet-stream', chunksize=8*1024*1024),
         ).execute()
@@ -657,7 +657,7 @@ def uploadDataToBucket(data, bucket_name, dest_path):
 
     print('INFO: Uploading data to "gs://%s/%s"...' % (bucket_name, body['name']))
     # TODO: make sure file uploaded or there is an isssue
-    resp = storage.objects().insert(
+    storage.objects().insert(
         bucket=bucket_name, body=body,
         media_body=MediaInMemoryUpload(data, mimetype='application/octet-stream'),
     ).execute()
@@ -678,7 +678,7 @@ def downloadDataFromBucket(bucket_name, path):
     try:
         done = False
         while done is False:
-            status, done = downloader.next_chunk()
+            _, done = downloader.next_chunk()
     except Exception as e:
         print('WARN: Downloading failed: %s' % e)
         return None

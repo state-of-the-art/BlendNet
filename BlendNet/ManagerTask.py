@@ -186,7 +186,7 @@ class ManagerTask(TaskBase):
         old_blob_id = None
         with self._results_preview_lock:
             old_blob_id = self._results_preview.get(agent_task)
-            if blob_id == None:
+            if blob_id is None:
                 if agent_task in self._results_preview:
                     self._results_preview.pop(agent_task)
             else:
@@ -201,7 +201,7 @@ class ManagerTask(TaskBase):
         old_blob_id = None
         with self._results_render_lock:
             old_blob_id = self._results_render.get(agent_task)
-            if blob_id == None:
+            if blob_id is None:
                 if agent_task in self._results_render:
                     self._results_render.pop(agent_task)
             else:

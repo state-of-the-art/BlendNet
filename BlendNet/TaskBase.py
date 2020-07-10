@@ -54,7 +54,7 @@ class TaskState(Enum):
 class TaskBase(ABC):
     '''Class with the common task functional'''
 
-    def __init__(self, parent, name, config, data = {}):
+    def __init__(self, parent, name, config, data = dict()):
         print('DEBUG: Creating new task %s' % name)
         if not isinstance(config, TaskConfig):
             raise Exception('Unable to set task with configuration %s' % type(config))
@@ -295,15 +295,6 @@ class TaskBase(ABC):
         '''Variety of details about the execution'''
         with self._execution_details_lock:
             return self._execution_details.copy()
-
-    def executionDetailsAdd(self, details, task = None):
-        '''Adds a new details to the list'''
-        if not isinstance(details, list):
-            details = [details]
-        if not isinstance(task, str):
-            task = self.name()
-        with self._execution_details_lock:
-            self._execution_details[task] = self._execution_details.get(task, []) + details
 
     def executionDetailsAdd(self, details, task = None):
         '''Adds a new details to the list'''

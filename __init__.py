@@ -247,15 +247,15 @@ class BlendNetSceneSettings(bpy.types.PropertyGroup):
 
 
     @classmethod
-    def register(cl):
+    def register(cls):
         bpy.types.Scene.blendnet = PointerProperty(
             name = 'BlendNet Settings',
             description = 'BlendNet scene settings',
-            type = cl
+            type = cls
         )
 
     @classmethod
-    def unregister(cl):
+    def unregister(cls):
         if hasattr(bpy.types.Scene, 'blendnet'):
             del bpy.types.Scene.blendnet
 
@@ -292,15 +292,15 @@ class BlendNetSessionProperties(bpy.types.PropertyGroup):
     )
 
     @classmethod
-    def register(cl):
+    def register(cls):
         bpy.types.WindowManager.blendnet = PointerProperty(
             name = 'BlendNet Session Properties',
             description = 'Just current status of process for internal use',
-            type = cl,
+            type = cls,
         )
 
     @classmethod
-    def unregister(cl):
+    def unregister(cls):
         if hasattr(bpy.types.WindowManager, 'blendnet'):
             del bpy.types.WindowManager.blendnet
 
@@ -389,7 +389,6 @@ class BlendNetDestroyManager(bpy.types.Operator):
         return BlendNet.addon.isManagerStopped()
 
     def invoke(self, context, event):
-        wm = context.window_manager
         BlendNet.addon.destroyManager()
         self.report({'INFO'}, 'BlendNet destroy Manager instance...')
 
@@ -414,6 +413,7 @@ class BlendNetTaskPreviewOperation(bpy.types.Operator):
                     continue
                 if area.spaces.active.image.type == 'RENDER_RESULT':
                     return area
+        return None
 
     def invoke(self, context, event):
         # Show the preview of the render if not open
@@ -662,7 +662,7 @@ class BlendNetTaskMessagesOperation(bpy.types.Operator):
 
         def drawPopupNo(self, context):
             task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='No task messages available for export' % (bpy.data.filepath, task_name))
+            self.layout.label(text='No task messages available for export for task "%s"' % (task_name,))
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
 
@@ -701,7 +701,7 @@ class BlendNetTaskDetailsOperation(bpy.types.Operator):
 
         def drawPopupNo(self, context):
             task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='No task details available for export' % (bpy.data.filepath, task_name))
+            self.layout.label(text='No task details available for export for task "%s"' % (task_name,))
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
 
@@ -859,7 +859,7 @@ class BlendNetTaskMenu(bpy.types.Menu):
         layout = self.layout
         wm = context.window_manager
 
-        if len(wm.blendnet.manager_tasks) == 0:
+        if not wm.blendnet.manager_tasks:
             layout.label(text='No tasks in the list')
             return
 
