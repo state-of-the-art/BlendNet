@@ -15,16 +15,16 @@ Please check out the wiki page: [Wiki](https://github.com/state-of-the-art/Blend
 * If you have a plan to use a cloud provider:
     * Google Cloud Platform (GCP)
         * Installed `Google Cloud SDK`
-        * Existing project with activated compute api
+        * Existing project with activated compute API
         * gcloud credentials (user or service account)
-        * Quotas ready to run planned amount of resources
+        * Quotas ready to run the planned amount of resources
 
 ## Purpose
 
 Existing Blender addons that enable network rendering on a cluster of instances
 are too complicated, not enough automated or too expensive. The solution is just
 to use the existing cloud providers with their cheap preemptible instances that
-costs ~3 times less than the regular ones.
+cost ~3 times less than the regular ones.
 
 For example `GCP` n1-highcpu-64 (**64 core 57.6GB RAM**) will cost you just
 **$0.48 per hour**. Just imagine this - a quite complicated `Cycles engine` frame
@@ -34,19 +34,19 @@ than $0.10.
 ## Challenges
 
 But yeah, it's not easy - preemptible instances are quite unstable and usually could
-be terminated without any notification by the GCP engine in any minute. So we need a
+be terminated without any notification by the GCP engine at any minute. So we need a
 system that will allow us to make sure that:
 
-1. We can easily run a number new instances by clicking just one button in Blender
+1. We can easily run many new instances by clicking just one button in Blender
 2. When the instance is terminated, we will not lose the render results
 3. It's cost-effective - the instances should live no more than required
     * When rendering is done - terminate the instances automatically
     * Unavailable timeout - that will automatically stop the worker if it's not
-    pinged by controller for a certain amount of time
-    * Resources are used near 100% to be sure we getting maximum for the money
-    * Calculation of costs for user
-4. Communication are secured (HTTPS and basic auth will work here)
-5. API of system is simple and available for anyone (for further support/adjustments)
+    pinged by a controller for a certain amount of time
+    * Resources are used near 100% to be sure we get maximum for the money
+    * Calculation of costs for the user
+4. Communication is secured (HTTPS and basic auth will work here)
+5. API of the system is simple and available for anyone (for further support/adjustments)
 
 ## Structure
 
@@ -61,7 +61,7 @@ All the components could be used independently with a browser or curl.
 ### Blender Addon
 
 It's integrated with the current Blender render engine and allows user to send the
-same configuration to the Manager to use the cloud resources for rendering.
+the same configuration to the Manager to use the cloud resources for rendering.
 
 Area of responsibility:
 * User UI with a way to configure and monitor the BlendNet activity.
@@ -88,11 +88,11 @@ Area of responsibility:
 * Collects and merges the previews and results from the Agents.
 * Saving your money as much as possible.
 
-When a task is marked to execute - Manager starts it and prepars a plan: it needs
+When a task is marked to execute - Manager starts it and prepares a plan: it needs
 to create the Agents, determine the number of samples per Agent, upload the
 dependencies to them, run the execution and watch for the status and progress.
 Meanwhile, it should plan for the next task (if there are some) - preload the
-dependencies and put it on hold.
+dependencies and put them on hold.
 
 It will leave the Agents active for a short period of time after the rendering process
 (by default 5 mins), will stop them after that. It will delete Agents and stop itself
@@ -101,7 +101,7 @@ if there are no tasks for 30 mins (by default).
 Tasks are coming from Addon: one task - one frame. Tasks have a number of samples to
 render - and the Manager decides how many samples it will give to an Agent. The Manager
 tries to keep the ratio loading/rendering relatively lower, but less than 30 mins per
-Agent task. By default it's 100 samples per Agent task.
+Agent task. By default, it's 100 samples per Agent task.
 
 #### Security
 
@@ -112,7 +112,7 @@ when it's not needed anymore (by default timeout is set to 30 mins).
 
 ### Agent
 
-Main workhorse of the system - receiving tasks, dependencies, configs and starting
+The main workhorse of the system - receiving tasks, dependencies, configs and start
 working on it. Reports status and previews back - so Manager (and user) could watch on
 progress.
 
@@ -120,7 +120,7 @@ Area of responsibility:
 * Receives granular tasks from the Manager with all the dependencies.
 * Executes the rendering process with verbose reports of the status.
 * Captures periodic previews to show the preliminary results.
-* Captures render result.
+* Captures render the result.
 * Watching on self-health status - if going to shutdown, captures the render result.
 
 #### Security
@@ -142,7 +142,7 @@ pair of user/password - they are stored as Manager configuration.
 
 When Addon wants to talk with Manager - it provides credentials in the HTTP request
 header, Manager compares those creds with the stored ones and if they are ok - allow
-the request and respond.
+the request and response.
 
 Almost the same process happening between Manager and Agent - but with Agent
 credentials.
@@ -154,10 +154,10 @@ to encrypt the whole communication between client and server.
 
 Required to encrypt the message transport - so no one but client and server can read
 those messages during transmission. That means any communication or transfer between
-Addon & Manager or Manager and Agent is completely encrypted.
+Addon & Manager or Manager and Agent are completely encrypted.
 
-TLS uses asymmetric encryption that involves 2 keys - private and public. In case of
-TLS public key file also contains some readable information and called certificate.
+TLS uses asymmetric encryption that involves 2 keys - private and public. In the case of
+TLS public key file also contains some readable information and called a certificate.
 
 When Manager is created the first time - it generates a custom Certificate Authority
 certificate and signs all the generated certificates with this CA certificate.
@@ -170,14 +170,14 @@ confirm the identity of the Agents.
 ## Pipeline
 
 Blender `Addon` gets the required credentials to run instances on providers (`GCP` and
-`local` is planned, later the other providers could be added). User also configures
+`local` is planned, later the other providers could be added). The user also configures
 some settings for the providers - what kind of instances he would like to use, timeouts
-and cost limits. Also, it checks for the proper setup of the project - make sure quotas
-and permissions are setup correctly.
+and cost limits. Also, it checks for the proper setup of the project - makes sure quotas
+and permissions are setups correctly.
 
 When a user chooses to start a task - addon saving a temporary blend file and creating
 the `Manager` (locally or on the provider instance - depends on user choice). It's
-passing the blend file, resources, local baked caches and a task specification to work
+passing the blend file, resources, locally baked caches and a task specification to work
 on.
 
 `Manager` allocates the required resources and starts the `Agent` workers. Splitting the
@@ -192,12 +192,12 @@ report and currently rendered image from the chosen task.
 ## API
 
 * `Agent` provides a simple API to get status, upload the data and run the job.
-* `Manager` have almost the same API as Agent - to get current Agents statuses in one
+* `Manager` has almost the same API as Agent - to get current Agents statuses in one
 place and schedule jobs.
 
 ## TODOs
 
-You can see all the feature requests/bugs on the github page:
+You can see all the feature requests/bugs on the Github page:
 
 * [Milestones](https://github.com/state-of-the-art/BlendNet/milestones)
 * [Issues](https://github.com/state-of-the-art/BlendNet/issues)
@@ -223,12 +223,12 @@ can see the issues:
 
 ### Addon configuration
 
-Addon is using provider tools for its configuration. So check that your provider tool is available
+The addon is using provider tools for its configuration. So check that your provider tool is available
 in your PATH and working correctly: you should be able to create an instance and bucket in the
-default project using the provider tool.
+default project using the provided tool.
 
 For example: To work with GCP and properly run the instances - you need a fresh `google cloud sdk`:
-* Command `gcloud init` will allow to initialize the configuration the first time
+* Command `gcloud init` will allow initializing the configuration the first time
 * Command `gcloud compute regions list` will show the available regions
 * Command `gcloud config set compute/region us-central1` will set the region to "us-central1"
 * Command `gcloud compute zones list` will show the available regions
@@ -241,17 +241,17 @@ can check that using google cloud web console at https://console.cloud.google.co
 * Command `gsutil mb gs://test-bucket-jsfkhbqfhbqw` should create a test bucket
 * Command `gsutil rm -r gs://test-bucket-jsfkhbqfhbqw` should clean and delete the test bucket
 
-Of course it's just an example  - but in general case those commands should work for you.
+Of course, it's just an example  - but in general case those commands should work for you.
 
 ### Manager instance provisioning
 
-This action actually uses bucket creation, bucket files upload, instance creation, autostarting
-script that downloads the Manager scripts from bucket and runns them. After that Manager generates
+This action actually uses bucket creation, bucket files upload, instance creation, an autostarting
+script that downloads the Manager scripts from the bucket and runs them. After that Manager generates
 CA and server SSL certificates and shares the CA certificate with Addon. Addon tries to connect the
-Manager using ssl connection and the credentials from configuration (or generated ones).
+A manager using an SSL connection and the credentials from configuration (or generated ones).
 
 What could go wrong here besides access to the GCP/Buckets from Addon:
-* Error during start of the Manager - check the serial console of the Manager instance for logs of
+* Error during the start of the Manager - check the serial console of the Manager instance for logs of
 the "startup-script".
 * Instance service account access - BlendNet using default account with access scopes, so Manager
 should already have the required rights to access buckets & GCE.
@@ -260,23 +260,23 @@ on the external IP. So make sure that the rule was created by the Addon properly
 
 ### Advanced users
 
-Check the Blender stdout - run it using console and you will see some debug messages from BlendNet.
-If Blender is started without a console to check stdout - just restart it from console and try to
+Check the Blender stdout - run it using a console and you will see some debug messages from BlendNet.
+If Blender is started without a console to check stdout - just restart it from the console and try to
 reproduce your steps to see additional information about the issue.
 
 Also if you know how python is working - you can add more debug output to the BlendNet addon - just
-edit the sources in it's directory, but please be careful.
+edit the sources in its directory, but please be careful.
 
 ### Getting support
 
-If you got no clues - you always can create an issue using this github repo, so we will try to help
+If you got no clues - you always can create an issue using this GitHub repo, so we will try to help
 and adjust the automation to make sure it will be fixed once and for all. But make sure you prepared
 all the required information about the issue - you will need to describe your environment and
 prepare steps to reproduce the issue you see.
 
 ## OpenSource
 
-This is an experimental project - main goal is to test State Of The Art philosophy in practice.
+This is an experimental project - the main goal is to test the State Of The Art philosophy in practice.
 
 We would like to see a number of independent developers working on the same project issues
 for the real money (attached to the ticket) or just for fun. So let's see how this will work.
@@ -290,9 +290,9 @@ but it's your choice, no pressure.
 
 ## Privacy policy
 
-It's very important to save user private data and you can be sure: we are working on security
+It's very important to save user private data and you can be sure: we are working on the security
 of our applications and improving it every day. No data could be sent somewhere without
-user notification and his direct approval. This application is using network connection
-as minimum as possible to perform only the operations of it's main purpose. All the
+user notification and his direct approval. This application is using a network connection
+as minimum as possible to perform only the operations of its main purpose. All the
 connections are secured by the wide using open standards. Any internet connection will not
-allow to collect any user personal data anyway.
+allow collecting any user personal data anyway.
