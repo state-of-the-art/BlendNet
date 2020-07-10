@@ -37,7 +37,7 @@ But yeah, it's not easy - preemptible instances are quite unstable and usually c
 be terminated without any notification by the GCP engine in any minute. So we need a
 system that will allow us to make sure that:
 
-1. We can easily run a number new instances by clicking just one button in blender
+1. We can easily run a number new instances by clicking just one button in Blender
 2. When the instance is terminated, we will not lose the render results
 3. It's cost-effective - the instances should live no more than required
     * When rendering is done - terminate the instances automatically
@@ -76,7 +76,7 @@ should already contain all the required caches before starting to render.
 
 ### Manager
 
-Required to make sure - even if blender will be closed, the rendering process will
+Required to make sure - even if Blender will be closed, the rendering process will
 be continued and the results will not be lost. Will execute the tasks sequentially -
 if the current task is almost complete and has waiting resources, it will start the
 next one to load the resources as much as possible.
@@ -88,20 +88,20 @@ Area of responsibility:
 * Collects and merges the previews and results from the Agents.
 * Saving your money as much as possible.
 
-When a task is marked to execute - manager starts it and prepars a plan: it needs
-to create the Agents, determine the number of samples per agent, upload the
+When a task is marked to execute - Manager starts it and prepars a plan: it needs
+to create the Agents, determine the number of samples per Agent, upload the
 dependencies to them, run the execution and watch for the status and progress.
 Meanwhile, it should plan for the next task (if there are some) - preload the
 dependencies and put it on hold.
 
-It will leave the agents active for a short period of time after the rendering process
-(by default 5 mins), will stop them after that. It will delete agents and stop itself
+It will leave the Agents active for a short period of time after the rendering process
+(by default 5 mins), will stop them after that. It will delete Agents and stop itself
 if there are no tasks for 30 mins (by default).
 
 Tasks are coming from Addon: one task - one frame. Tasks have a number of samples to
-render - and the Manager decides how many samples it will give to an agent. The Manager
+render - and the Manager decides how many samples it will give to an Agent. The Manager
 tries to keep the ratio loading/rendering relatively lower, but less than 30 mins per
-agent task. By default it's 100 samples per agent task.
+Agent task. By default it's 100 samples per Agent task.
 
 #### Security
 
@@ -125,7 +125,7 @@ Area of responsibility:
 
 #### Security
 
-The Agent has an external IP for a short period of time to get the required blender
+The Agent has an external IP for a short period of time to get the required Blender
 dependencies - after that it's removed by the Manager. All the connections are
 encrypted and access is protected by a strong generated password.
 
@@ -144,7 +144,7 @@ When Addon wants to talk with Manager - it provides credentials in the HTTP requ
 header, Manager compares those creds with the stored ones and if they are ok - allow
 the request and respond.
 
-Almost the same process happening between Manager and Agent - but with agent
+Almost the same process happening between Manager and Agent - but with Agent
 credentials.
 
 Those credentials are passed to the Manager/Agent as clear text, so BlendNet uses TLS
@@ -162,10 +162,10 @@ TLS public key file also contains some readable information and called certifica
 When Manager is created the first time - it generates a custom Certificate Authority
 certificate and signs all the generated certificates with this CA certificate.
 Manager uploads this certificate back to the bucket and Addon can use it to confirm
-that this manager is the one Addon needs.
+that this Manager is the one Addon needs.
 
 When the Manager creates Agents - it generates certificates for each one and uses CA to
-confirm the identity of the agents.
+confirm the identity of the Agents.
 
 ## Pipeline
 
@@ -192,7 +192,7 @@ report and currently rendered image from the chosen task.
 ## API
 
 * `Agent` provides a simple API to get status, upload the data and run the job.
-* `Manager` have almost the same API as Agent - to get current agents statuses in one
+* `Manager` have almost the same API as Agent - to get current Agents statuses in one
 place and schedule jobs.
 
 ## TODOs
@@ -229,11 +229,11 @@ default project using the provider tool.
 
 For example: To work with GCP and properly run the instances - you need a fresh `google cloud sdk`:
 * Command `gcloud init` will allow to initialize the configuration the first time
-* Comamnd `gcloud compute regions list` will show the available regions
+* Command `gcloud compute regions list` will show the available regions
 * Command `gcloud config set compute/region us-central1` will set the region to "us-central1"
-* Comamnd `gcloud compute zones list` will show the available regions
+* Command `gcloud compute zones list` will show the available regions
 * Command `gcloud config set compute/zone us-central1-f` will set the zone to "us-central1-f"
-* Command `gcloud info` should print out where sdk is installed
+* Command `gcloud info` should print out where SDK is installed
 * Command `gcloud auth list` should show the currently selected account
 * Command `gcloud compute instances create test-instance` should actually create a new instance (you
 can check that using google cloud web console at https://console.cloud.google.com/compute/instances)
@@ -251,7 +251,7 @@ CA and server SSL certificates and shares the CA certificate with Addon. Addon t
 Manager using ssl connection and the credentials from configuration (or generated ones).
 
 What could go wrong here besides access to the GCP/Buckets from Addon:
-* Error during start of the Manager - check the serial console of the manager instance for logs of
+* Error during start of the Manager - check the serial console of the Manager instance for logs of
 the "startup-script".
 * Instance service account access - BlendNet using default account with access scopes, so Manager
 should already have the required rights to access buckets & GCE.
@@ -260,8 +260,8 @@ on the external IP. So make sure that the rule was created by the Addon properly
 
 ### Advanced users
 
-Check the blender stdout - run it using console and you will see some debug messages from BlendNet.
-If blender is started without a console to check stdout - just restart it from console and try to
+Check the Blender stdout - run it using console and you will see some debug messages from BlendNet.
+If Blender is started without a console to check stdout - just restart it from console and try to
 reproduce your steps to see additional information about the issue.
 
 Also if you know how python is working - you can add more debug output to the BlendNet addon - just
