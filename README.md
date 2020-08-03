@@ -1,6 +1,8 @@
 BlendNet
 ========
 
+[![Join the chat at https://gitter.im/state-of-the-art/BlendNet](https://badges.gitter.im/state-of-the-art/BlendNet.svg)](https://gitter.im/state-of-the-art/BlendNet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Blender network rendering farm system with dynamic allocating of required resources.
 
 * [Site page about it](https://www.state-of-the-art.io/projects/blendnet/)
