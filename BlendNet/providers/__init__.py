@@ -1,7 +1,9 @@
 from .InstanceProvider import InstanceProvider
 from ..Workers import Workers
 
-import os, importlib
+import os
+import traceback
+import importlib
 
 modules = {}
 
@@ -14,6 +16,7 @@ with os.scandir(os.path.dirname(__file__)) as it:
             modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
         except Exception as e:
             print('WARN: Unable to load "%s" provider due to init error: %s' % (entry.name, e))
+            traceback.print_exc()
             modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
 
 __all__ = [
@@ -65,9 +68,10 @@ def _execProviderFunc(func, default = {}, *args, **kwargs):
         return default
     try:
         return getattr(modules[selected_provider], func)(*args, **kwargs)
-    except:
-        import sys
-        print('WARN: Catched exception from "%s" provider execution of %s: %s' % (selected_provider, func, sys.exc_info()))
+    except Exception as e:
+        print('WARN: Catched exception from "%s" provider execution of %s: %s' % (selected_provider, func, e))
+        import traceback
+        traceback.print_exc()
         return default
 
 def getProviderInfo():
