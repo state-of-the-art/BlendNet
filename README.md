@@ -9,7 +9,8 @@ Blender network rendering farm system with dynamic allocating of required resour
 
 ## Usage
 
-Please check out the wiki page: [Wiki](https://github.com/state-of-the-art/BlendNet/wiki)
+Please check out the wiki page: [Wiki](https://github.com/state-of-the-art/BlendNet/wiki) - it
+contains more information about how to setup each supported provider and some useful details.
 
 ## Requirements
 
@@ -17,9 +18,12 @@ Please check out the wiki page: [Wiki](https://github.com/state-of-the-art/Blend
 * If you have a plan to use a cloud provider:
     * Google Cloud Platform (GCP)
         * Installed `Google Cloud SDK`
-        * Existing project with activated compute api
         * gcloud credentials (user or service account)
+        * Existing project with activated compute api
         * Quotas ready to run planned amount of resources
+    * Amazon Web Services
+        * Installed `AWS CLI V2`
+        * Configured aws tool access key
 
 ## Purpose
 
@@ -210,55 +214,9 @@ You can see all the feature requests/bugs on the github page:
 * Cost estimation before rendering
 * Distributed smoke baking (per-domain): it's hard to bake multiple domains - it requires one domain
   per bake, others should be turned off
-* Adding `AWS` and other cloud providers
 * Allocating of preemptible GPU on the instances
 * Detailed statistics to optimize the pipeline
-* Simplify the setup process for the end-user
 * Web interface to check the status
-
-## Issues
-
-If BlendNet says "Something is wrong" or works incorrectly - it's the right place to find
-the answer. BlendNet wants to automate the process as much as possible, but sometimes
-environments are so much custom that the automation could work wrong. Let's check where you
-can see the issues:
-
-### Addon configuration
-
-Addon is using provider tools for its configuration. So check that your provider tool is available
-in your PATH and working correctly: you should be able to create an instance and bucket in the
-default project using the provider tool.
-
-For example: To work with GCP and properly run the instances - you need a fresh `google cloud sdk`:
-* Command `gcloud init` will allow to initialize the configuration the first time
-* Command `gcloud compute regions list` will show the available regions
-* Command `gcloud config set compute/region us-central1` will set the region to "us-central1"
-* Command `gcloud compute zones list` will show the available regions
-* Command `gcloud config set compute/zone us-central1-f` will set the zone to "us-central1-f"
-* Command `gcloud info` should print out where SDK is installed
-* Command `gcloud auth list` should show the currently selected account
-* Command `gcloud compute instances create test-instance` should actually create a new instance (you
-can check that using google cloud web console at https://console.cloud.google.com/compute/instances)
-* Command `gcloud compute instances delete test-instance` should actually delete the instance
-* Command `gsutil mb gs://test-bucket-jsfkhbqfhbqw` should create a test bucket
-* Command `gsutil rm -r gs://test-bucket-jsfkhbqfhbqw` should clean and delete the test bucket
-
-Of course it's just an example  - but in general case those commands should work for you.
-
-### Manager instance provisioning
-
-This action actually uses bucket creation, bucket files upload, instance creation, autostarting
-script that downloads the Manager scripts from bucket and runns them. After that Manager generates
-CA and server SSL certificates and shares the CA certificate with Addon. Addon tries to connect the
-Manager using ssl connection and the credentials from configuration (or generated ones).
-
-What could go wrong here besides access to the GCP/Buckets from Addon:
-* Error during start of the Manager - check the serial console of the Manager instance for logs of
-the "startup-script".
-* Instance service account access - BlendNet using default account with access scopes, so Manager
-should already have the required rights to access buckets & GCE.
-* Firewall rules - Addon should have access to the newly created/started Manager port (default 8443)
-on the external IP. So make sure that the rule was created by the Addon properly.
 
 ### Advanced users
 

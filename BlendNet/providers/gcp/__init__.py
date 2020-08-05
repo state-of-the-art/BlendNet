@@ -58,11 +58,11 @@ def setGoogleCloudSdk(path):
 
 def findGoogleCloudSdk():
     '''Will try to find the google cloud sdk home directory'''
-    # windows doesn't use PATH to locate binary unless shell=True
-    if platform.system() == 'Windows':
-        result = subprocess.run(['gcloud', 'info'], shell=True, stdout=subprocess.PIPE)
-    else:
-        result =  subprocess.run(['gcloud', 'info'], stdout=subprocess.PIPE)
+    # Windows doesn't use PATH to locate binary unless shell=True
+    result = subprocess.run(['gcloud', 'info'],
+                            shell=(platform.system() == 'Windows'),
+                            stdout=subprocess.PIPE)
+
     if result.returncode != 0:
         return
     lines = result.stdout.decode('utf-8').split('\n')
