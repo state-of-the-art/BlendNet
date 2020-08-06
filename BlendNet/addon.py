@@ -387,8 +387,7 @@ def startManager(cfg = None):
         providers.createInstanceManager(cfg)
         print('DEBUG: Creating the required firewall rules')
         providers.createFirewall('blendnet-manager', cfg['listen_port'])
-        # Not needed firewall for agent - manager is using internal agent ip
-        #providers.createFirewall('blendnet-agent', cfg['agent_listen_port'])
+        providers.createFirewall('blendnet-agent', cfg['agent_listen_port'])
         # TODO: Setup subnetwork to use internal google services
     elif isManagerStopped():
         print('DEBUG: Starting manager instance')
