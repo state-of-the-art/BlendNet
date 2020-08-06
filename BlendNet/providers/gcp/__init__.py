@@ -301,7 +301,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
 fi
 
 echo '--> Download & run the BlendNet manager'
@@ -421,7 +421,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
 fi
 
 echo '--> Download & run the BlendNet agent'
@@ -572,6 +572,9 @@ def deleteInstance(instance_name):
 
 def createFirewall(target_tag, port):
     '''Create minimal firewall to access external IP of manager/agent'''
+    # Skipping blendnet-agent
+    if target_tag == 'blendnet-agent':
+        return
     compute, configs = _getCompute(), _getConfigs()
 
     body = {

@@ -47,12 +47,10 @@ def checkLocation():
 def checkDependencies():
     return AWS_TOOL_PATH is not None
 
-def _executeAwsTool(*args, fail_ok = False):
+def _executeAwsTool(*args):
     '''Runs the aws tool and returns code and data as tuple'''
     result = subprocess.run(AWS_EXEC_PREFIX + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
-        if fail_ok:
-            return None
         raise AwsToolException('AWS tool returned %d during execution of "%s": %s' % (
             result.returncode, AWS_EXEC_PREFIX + args, result.stderr))
 
@@ -175,7 +173,7 @@ def _createRoles():
         _executeAwsTool('iam', 'add-role-to-instance-profile',
                         '--instance-profile-name', 'blendnet-manager',
                         '--role-name', 'blendnet-manager')
-    except AwsToolException as e:
+    except AwsToolException:
         # The blendnet-manager role is already exists
         pass
 
@@ -194,7 +192,7 @@ def _createRoles():
         _executeAwsTool('iam', 'add-role-to-instance-profile',
                         '--instance-profile-name', 'blendnet-agent',
                         '--role-name', 'blendnet-agent')
-    except AwsToolException as e:
+    except AwsToolException:
         # The blendnet-agent role is already exists
         pass
 
@@ -254,6 +252,8 @@ def createInstanceManager(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-manager"}',
         '--block-device-mappings', json.dumps(disk_config),
+        '--key-name', 'default_key',
+        '--security-groups', 'blendnet-manager',
         '--user-data', 'file://' + startup_script_file.name,
     ]
 
@@ -277,9 +277,9 @@ fi
 
 echo '--> Download & run the BlendNet manager'
 adduser --shell /bin/false --disabled-password blendnet-user
-aws cp --recursive 's3://blendnet-{session_id}/work_manager' "$(getent passwd blendnet-user | cut -d: -f6)"
-aws rm --recursive 's3://blendnet-{session_id}/work_manager'
-aws cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+aws s3 cp --recursive 's3://blendnet-{session_id}/work_manager' "$(getent passwd blendnet-user | cut -d: -f6)"
+aws s3 rm --recursive 's3://blendnet-{session_id}/work_manager'
+aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
 
 cat <<'EOF' > /etc/systemd/system/blendnet-manager.service
 [Unit]
@@ -314,7 +314,7 @@ systemctl start blendnet-manager.service # We don't need "enable" here
     data = _executeAwsTool(*options)
     # Waiting for the operation to completed
     _executeAwsTool('ec2', 'wait', 'instance-running',
-                    '--instance-ids', data[1]['Instances'][0]['InstanceId'])
+                    '--instance-ids', data['Instances'][0]['InstanceId'])
 
     return True
 
@@ -379,13 +379,13 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
 fi
 
 echo '--> Download & run the BlendNet agent'
 adduser --shell /bin/false --disabled-password blendnet-user
-aws cp --recursive 's3://blendnet-{session_id}/work_{name}' "$(getent passwd blendnet-user | cut -d: -f6)"
-aws cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+aws s3 cp --recursive 's3://blendnet-{session_id}/work_{name}' "$(getent passwd blendnet-user | cut -d: -f6)"
+aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
 
 cat <<'EOF' > /etc/systemd/system/blendnet-agent.service
 [Unit]
@@ -421,7 +421,7 @@ systemctl start blendnet-agent.service # We don't need "enable" here
     data = _executeAwsTool(*options)
     # Waiting for the operation to completed
     _executeAwsTool('ec2', 'wait', 'instance-running',
-                    '--instance-ids', data[1]['Instances'][0]['InstanceId'])
+                    '--instance-ids', data['Instances'][0]['InstanceId'])
 
     return True
 
@@ -455,10 +455,33 @@ def deleteInstance(instance_name):
     _executeAwsTool('ec2', 'wait', 'instance-terminated',
                     '--instance-ids', instance_id)
 
-def createFirewall(target_tag, port):
+def createFirewall(target_group, port):
     '''Create minimal firewall to access external IP of manager/agent'''
-    # TODO
-    # By default AWS is wide open
+    # Skipping blendnet-agent
+    if target_group == 'blendnet-agent':
+        return
+
+    # Create the security group
+    try:
+        _executeAwsTool('ec2', 'create-security-group',
+                        '--group-name', target_group,
+                        '--description', 'Automatically created by BlendNet')
+        _executeAwsTool('ec2', 'authorize-security-group-ingress',
+                        '--group-name', target_group,
+                        '--protocol', 'tcp',
+                        '--port', '22',
+                        '--cidr', '0.0.0.0/0')
+        _executeAwsTool('ec2', 'authorize-security-group-ingress',
+                        '--group-name', target_group,
+                        '--protocol', 'tcp',
+                        '--port', str(port),
+                        '--cidr', '0.0.0.0/0')
+        # Waiting for the operation to completed
+        _executeAwsTool('ec2', 'wait', 'security-group-exists',
+                        '--group-names', target_group)
+    except AwsToolException:
+        # The blendnet-manager security group already exists
+        pass
 
 def createBucket(bucket_name):
     '''Creates bucket if it's not exists'''
@@ -502,8 +525,10 @@ def downloadDataFromBucket(bucket_name, path):
 
     print('INFO: Downloading file from "%s" ...' % (path,))
 
-    if _executeAwsTool('s3', 'cp', path, tmp_file.name)[0] != 0:
-        print('WARN: Downloading failed: %s' % e)
+    try:
+        _executeAwsTool('s3', 'cp', path, tmp_file.name)
+    except AwsToolException:
+        print('WARN: Downloading failed')
         return None
 
     return tmp_file.read()
@@ -513,16 +538,19 @@ def getResources(session_id):
     out = {'agents':{}}
 
     def parseInstanceInfo(it):
-        name = [ tag['Value'] for tag in it['Tags'] if tag['Key'] == 'Name' ][0]
-        return {
-            'name': name,
-            'ip': it['PublicIpAddress'],
-            'internal_ip': it['PrivateIpAddress'],
-            'type': it['InstanceType'],
-            'started': it['State']['Name'] == 'running',
-            'stopped': it['State']['Name'] == 'stopped',
-            'created': it['LaunchTime'],
-        }
+        try:
+            name = [ tag['Value'] for tag in it['Tags'] if tag['Key'] == 'Name' ][0]
+            return {
+                'name': name,
+                'ip': it['PublicIpAddress'],
+                'internal_ip': it['PrivateIpAddress'],
+                'type': it['InstanceType'],
+                'started': it['State']['Name'] == 'running',
+                'stopped': it['State']['Name'] == 'stopped',
+                'created': it['LaunchTime'],
+            }
+        except:
+            return None
 
     data = _executeAwsTool('ec2', 'describe-instances',
                            '--filters', 'Name=tag:Session,Values='+session_id,
@@ -532,6 +560,8 @@ def getResources(session_id):
 
     for it in data:
         inst = parseInstanceInfo(it)
+        if not inst:
+            continue
         it_type = [ tag['Value'] for tag in it['Tags'] if tag['Key'] == 'Type' ][0]
         if it_type == 'manager':
             out['manager'] = inst
