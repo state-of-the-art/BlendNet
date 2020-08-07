@@ -252,6 +252,7 @@ def createInstanceManager(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-manager"}',
         '--block-device-mappings', json.dumps(disk_config),
+        # DEBUG TODO: Remove
         '--key-name', 'default_key',
         '--security-groups', 'blendnet-manager',
         '--user-data', 'file://' + startup_script_file.name,
@@ -275,11 +276,16 @@ if [ ! -x /srv/blender/blender ]; then
     tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
 fi
 
-echo '--> Download & run the BlendNet manager'
-adduser --shell /bin/false --disabled-password blendnet-user
+cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
+#!/bin/sh
+echo '--> Update the BlendNet manager'
 aws s3 cp --recursive 's3://blendnet-{session_id}/work_manager' "$(getent passwd blendnet-user | cut -d: -f6)"
 aws s3 rm --recursive 's3://blendnet-{session_id}/work_manager'
 aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+EOF
+
+chmod +x /usr/local/bin/blendnet_cloud_init.sh
+adduser --shell /bin/false --disabled-password blendnet-user
 
 cat <<'EOF' > /etc/systemd/system/blendnet-manager.service
 [Unit]
@@ -287,9 +293,11 @@ Description=BlendNet Manager Service
 After=network-online.target google-network-daemon.service
 
 [Service]
+PermissionsStartOnly=true
 User=blendnet-user
 WorkingDirectory=~
 Type=simple
+ExecStartPre=/usr/local/bin/blendnet_cloud_init.sh
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 Restart=always
 TimeoutStopSec=60
@@ -300,8 +308,10 @@ StandardError=syslog
 WantedBy=multi-user.target
 EOF
 
+echo '--> Run the BlendNet manager'
 systemctl daemon-reload
-systemctl start blendnet-manager.service # We don't need "enable" here
+systemctl enable blendnet-manager.service
+systemctl start blendnet-manager.service
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
@@ -382,10 +392,15 @@ if [ ! -x /srv/blender/blender ]; then
     tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
 fi
 
-echo '--> Download & run the BlendNet agent'
-adduser --shell /bin/false --disabled-password blendnet-user
+cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
+#!/bin/sh
+echo '--> Update the BlendNet agent'
 aws s3 cp --recursive 's3://blendnet-{session_id}/work_{name}' "$(getent passwd blendnet-user | cut -d: -f6)"
 aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+EOF
+
+chmod +x /usr/local/bin/blendnet_cloud_init.sh
+adduser --shell /bin/false --disabled-password blendnet-user
 
 cat <<'EOF' > /etc/systemd/system/blendnet-agent.service
 [Unit]
@@ -393,9 +408,11 @@ Description=BlendNet Agent Service
 After=network-online.target google-network-daemon.service
 
 [Service]
+PermissionsStartOnly=true
 User=blendnet-user
 WorkingDirectory=~
 Type=simple
+ExecStartPre=/usr/local/bin/blendnet_cloud_init.sh
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
 Restart=always
 TimeoutStopSec=20
@@ -406,8 +423,10 @@ StandardError=syslog
 WantedBy=multi-user.target
 EOF
 
+echo '--> Run the BlendNet agent'
 systemctl daemon-reload
-systemctl start blendnet-agent.service # We don't need "enable" here
+systemctl enable blendnet-agent.service
+systemctl start blendnet-agent.service
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
@@ -531,7 +550,9 @@ def downloadDataFromBucket(bucket_name, path):
         print('WARN: Downloading failed')
         return None
 
-    return tmp_file.read()
+    # The original tmp_file is unlinked, so reread it
+    with open(tmp_file.name, 'rb') as fh:
+        return fh.read()
 
 def getResources(session_id):
     '''Get the allocated resources with a specific session_id'''
@@ -542,7 +563,7 @@ def getResources(session_id):
             name = [ tag['Value'] for tag in it['Tags'] if tag['Key'] == 'Name' ][0]
             return {
                 'name': name,
-                'ip': it['PublicIpAddress'],
+                'ip': it.get('PublicIpAddress'),
                 'internal_ip': it['PrivateIpAddress'],
                 'type': it['InstanceType'],
                 'started': it['State']['Name'] == 'running',

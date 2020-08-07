@@ -16,7 +16,7 @@ with os.scandir(os.path.dirname(__file__)) as it:
             modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
         except Exception as e:
             print('WARN: Unable to load "%s" provider due to init error: %s' % (entry.name, e))
-            traceback.print_exc()
+            #traceback.print_exc()
             modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
 
 __all__ = [
