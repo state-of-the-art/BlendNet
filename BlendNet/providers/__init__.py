@@ -110,22 +110,24 @@ def getAgentSizeDefault():
     return _execProviderFunc('getAgentSizeDefault', '')
 
 def createInstanceManager(cfg):
+    ''' Returns created instance id '''
     return _execProviderFunc('createInstanceManager', '', cfg)
 
 def createInstanceAgent(cfg):
+    ''' Returns created instance id '''
     return _execProviderFunc('createInstanceAgent', '', cfg)
 
-def startInstance(name):
-    return _execProviderFunc('startInstance', '', name)
+def startInstance(inst_id):
+    return _execProviderFunc('startInstance', '', inst_id)
 
-def stopInstance(name):
-    return _execProviderFunc('stopInstance', '', name)
+def stopInstance(inst_id):
+    return _execProviderFunc('stopInstance', '', inst_id)
 
-def destroyInstance(name):
-    return _execProviderFunc('destroyInstance', '', name)
+def destroyInstance(inst_id):
+    return _execProviderFunc('destroyInstance', '', inst_id)
 
-def deleteInstance(name):
-    return _execProviderFunc('deleteInstance', '', name)
+def deleteInstance(inst_id):
+    return _execProviderFunc('deleteInstance', '', inst_id)
 
 def downloadDataFromBucket(bucket_name, path):
     return _execProviderFunc('downloadDataFromBucket', None, bucket_name, path)

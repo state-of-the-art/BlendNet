@@ -391,14 +391,14 @@ def startManager(cfg = None):
         # TODO: Setup subnetwork to use internal google services
     elif isManagerStopped():
         print('DEBUG: Starting manager instance')
-        providers.startInstance(cfg['instance_name'])
+        providers.startInstance(getResources()['manager']['id'])
 
 def stopManager(cfg = None):
     cfg = cfg if cfg else getConfig()
 
     if isManagerStarted():
         print('DEBUG: Stopping manager instance')
-        providers.stopInstance(cfg['instance_name'])
+        providers.stopInstance(getResources()['manager']['id'])
 
 def destroyManager(cfg = None):
     cfg = cfg if cfg else getConfig()
@@ -406,7 +406,7 @@ def destroyManager(cfg = None):
     def worker(cfg):
         if isManagerStopped():
             print('DEBUG: Destroying manager instance')
-            providers.deleteInstance(cfg['instance_name'])
+            providers.deleteInstance(getResources()['manager']['id'])
 
     _runBackgroundWork(worker, getConfig())
 
