@@ -302,8 +302,7 @@ def createInstanceManager(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-manager"}',
         '--block-device-mappings', json.dumps(disk_config),
-        # DEBUG TODO: Remove
-        '--key-name', 'default_key',
+        #'--key-name', 'default_key', # If you want to ssh to the instance (and change createFirewall func)
         '--security-groups', 'blendnet-manager',
         '--user-data', 'file://' + startup_script_file.name,
     ]
@@ -421,8 +420,7 @@ def createInstanceAgent(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-agent"}',
         '--block-device-mappings', json.dumps(disk_config),
-        # DEBUG TODO: Remove
-        '--key-name', 'default_key',
+        #'--key-name', 'default_key', # If you want to ssh to the instance (and change createFirewall func)
         '--security-groups', 'blendnet-agent',
         '--user-data', 'file://' + startup_script_file.name,
     ]
@@ -533,12 +531,12 @@ def createFirewall(target_group, port):
                         '--group-name', target_group,
                         '--description', 'Automatically created by BlendNet')
         print('INFO: Creating security group for %s' % (target_group,))
-        # DEBUG TODO: Remove ssh access
-        _executeAwsTool('ec2', 'authorize-security-group-ingress',
-                        '--group-name', target_group,
-                        '--protocol', 'tcp',
-                        '--port', '22',
-                        '--cidr', '0.0.0.0/0')
+        # Rule to allow remote ssh to the instance
+        #_executeAwsTool('ec2', 'authorize-security-group-ingress',
+        #                '--group-name', target_group,
+        #                '--protocol', 'tcp',
+        #                '--port', '22',
+        #                '--cidr', '0.0.0.0/0')
         _executeAwsTool('ec2', 'authorize-security-group-ingress',
                         '--group-name', target_group,
                         '--protocol', 'tcp',
