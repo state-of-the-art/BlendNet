@@ -105,7 +105,7 @@ class Manager(providers.Manager, TaskExecutorBase):
             for agent in self._agents_pool:
                 print('WARN: Deleting the agent %s due to Manager termination' % agent._name)
                 # We don't need to wait until delete will be completed
-                thread = threading.Thread(target=providers.deleteInstance, args=(agent._name,))
+                thread = threading.Thread(target=providers.deleteInstance, args=(agent._id,))
                 thread.daemon = True
                 thread.start()
 

@@ -26,8 +26,9 @@ class ManagerAgentWorker:
     def __init__(self, manager, name, cfg):
         print('DEBUG: Creating agent worker %s' % name)
         self._parent = manager
+        self._id = None
         self._name = name
-        self._cfg = cfg
+        self._cfg = cfg.copy()
 
         # Generate agent certificates
         SimpleREST.generateCert(self._name, self._name)
@@ -150,7 +151,7 @@ class ManagerAgentWorker:
                 self.runWorkload(self._work['task_name'])
             elif last_time_had_task and time.time() > last_time_had_task + 300:
                 print('WARN: Stopping the agent "%s" - there was no tasks for 5 mins' % self._name)
-                providers.stopInstance(self._name)
+                providers.stopInstance(self._id)
                 last_time_had_task = None
 
             time.sleep(1.0)
@@ -181,12 +182,13 @@ class ManagerAgentWorker:
     def _stateWatcher(self):
         '''Watch on the agent state'''
         print('DEBUG: Starting agent state watcher %s' % self._name)
-        agent = self._parent.resourcesGet().get('agents', {}).get(self._name, {})
+        agent = self._parent.resourcesGet().get('agents', {}).get(self._id, {})
         while self._enabled:
             # Destroy agent if it's type is wrong
             if agent and agent.get('type') != self._cfg['instance_type']:
                 print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (self._name, agent.get('type'), self._cfg['instance_type']))
-                providers.deleteInstance(self._name)
+                providers.deleteInstance(self._id)
+                self._id = None
 
             # STARTED/ACTIVE - check agent status
             if self.state() in (ManagerAgentState.STARTED, ManagerAgentState.ACTIVE):
@@ -199,7 +201,7 @@ class ManagerAgentWorker:
                     time.sleep(1.0)
                     continue
 
-            agent = self._parent.resourcesGet().get('agents', {}).get(self._name, {})
+            agent = self._parent.resourcesGet().get('agents', {}).get(self._id, {})
             if not agent:
                 self._setState(ManagerAgentState.DESTROYED)
                 self._client = None
@@ -227,7 +229,7 @@ class ManagerAgentWorker:
     def _startAgent(self):
         '''Create and start the agent if it's needed'''
         if self.state() in (ManagerAgentState.STOPPED, ManagerAgentState.DESTROYED):
-            # Agent will need config files almost right after the start
+            # Agent will need config files right after the start
             providers.uploadFileToBucket('%s.key' % self._name, self._cfg['bucket'], 'work_%s/server.key' % self._name)
             providers.uploadFileToBucket('%s.crt' % self._name, self._cfg['bucket'], 'work_%s/server.crt' % self._name)
             providers.uploadDataToBucket(json.dumps(self._cfg).encode('utf-8'), self._cfg['bucket'], 'work_%s/agent.json' % self._name)
@@ -235,12 +237,12 @@ class ManagerAgentWorker:
         if self.state() == ManagerAgentState.STOPPED:
             print('DEBUG: Starting the existing agent instance "%s"' % self._name)
             self._setState(ManagerAgentState.UNKNOWN)
-            providers.startInstance(self._name)
+            providers.startInstance(self._id)
         elif self.state() == ManagerAgentState.DESTROYED:
             print('DEBUG: Creating a new agent instance "%s"' % self._name)
             self._setState(ManagerAgentState.UNKNOWN)
             self._cfg['instance_name'] = self._name
-            providers.createInstanceAgent(self._cfg)
+            self._id = providers.createInstanceAgent(self._cfg)
 
     def _waitAgent(self):
         '''Will wait for agent availability'''

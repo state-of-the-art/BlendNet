@@ -394,7 +394,7 @@ systemctl start blendnet-manager.service # We don't need "enable" here
     # Waiting for the operation to complete
     resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
 
-    return True
+    return cfg['instance_name']
 
 def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
@@ -516,7 +516,7 @@ systemctl start blendnet-agent.service # We don't need "enable" here
     # Waiting for the operation to complete
     resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
 
-    return True
+    return cfg['instance_name']
 
 def removeInstanceExternalIP(instance_name):
     '''Will remove the external IP from the instance and return an internal one'''
@@ -697,6 +697,7 @@ def getResources(session_id):
     def parseInstanceInfo(it):
         access_cfgs = it['networkInterfaces'][0].get('accessConfigs', [{}])
         return {
+            'id': it['name'],
             'name': it['name'],
             'ip': access_cfgs[0].get('natIP'),
             'internal_ip': it['networkInterfaces'][0]['networkIP'],
@@ -718,7 +719,7 @@ def getResources(session_id):
             if it['labels'].get('type') == 'manager':
                 out['manager'] = inst
             elif it['labels'].get('type') == 'agent':
-                out['agents'][inst['name']] = inst
+                out['agents'][inst['id']] = inst
             else:
                 print('WARN: Unknown resource instance %s' % inst['name'])
 

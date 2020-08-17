@@ -9,7 +9,7 @@ import time # To sleep threads sometimes
 import threading # To watch on the termination status
 import urllib.request # To request metadata
 
-from . import METADATA_URL
+from . import _requestMetadata
 from .. import InstanceProvider
 
 class Instance(InstanceProvider):
@@ -39,29 +39,27 @@ class Instance(InstanceProvider):
             self._terminating = None
             self._terminating_reset_timer = threading.Timer(90, self._terminatingWatchersReset)
 
-        urls = [
-            METADATA_URL + 'spot/termination-time',
+        paths = [
+            'meta-data/spot/termination-time',
         ]
-        self._terminating_threads = [threading.Thread(target=self._isTerminatingWatch, args=(url,)) for url in urls]
+        self._terminating_threads = [threading.Thread(target=self._isTerminatingWatch, args=(path,)) for path in paths]
         for thread in self._terminating_threads:
             thread.start()
 
-    def _isTerminatingWatch(self, url):
-        print('INFO: Listening on url "%s" for termination status' % url)
-        req = urllib.request.Request(url)
+    def _isTerminatingWatch(self, path):
+        print('INFO: Checking metadata path "%s" for termination status' % path)
 
         while True:
             with self._terminating_lock:
                 if self._terminating or not self._terminating_threads_run:
                     return
             try:
-                with urllib.request.urlopen(req, timeout=10) as res:
-                    if res.getcode() in {503, 404}:
-                        time.sleep(5)
-                        continue
+                data = _requestMetadata(path)
+                if data is None:
+                    time.sleep(5)
+                    continue
 
-                    data = res.read()
-                    print('WARN: Found terminating status for url: %s, "%s"' % (url, data))
+                    print('WARN: Found terminating status for path: %s, "%s"' % (path, data))
                     with self._terminating_lock:
                         if not self._terminating:
                             self._terminating_reset_timer.start()

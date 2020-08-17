@@ -15,23 +15,26 @@ import tempfile
 import urllib.request
 import subprocess
 
-METADATA_URL = 'http://169.254.169.254/latest/meta-data/'
+METADATA_URL = 'http://169.254.169.254/latest/'
 
 LOCATION = None # If the script is running in the cloud
 AWS_TOOL_PATH = None
 AWS_EXEC_PREFIX = ('--output', 'json')
 AWS_CONFIGS = None
 
-def _requestMetadata(path):
+def _requestMetadata(path, verbose = False):
     req = urllib.request.Request(METADATA_URL+path)
     try:
         while True:
             with urllib.request.urlopen(req, timeout=2) as res:
                 if res.getcode() == 503:
-                    time.sleep(1)
+                    print('WARN: Unable to reach metadata serivce')
+                    time.sleep(5)
                     continue
                 return res.read().decode('utf-8')
-    except:
+    except Exception as e:
+        if verbose:
+            print('WARN: Metadata is not available ' + path)
         return None
 
 def checkLocation():
@@ -41,7 +44,7 @@ def checkLocation():
     if LOCATION is not None:
         return LOCATION
 
-    LOCATION = _requestMetadata('') is not None
+    LOCATION = _requestMetadata('', True) is not None
     return LOCATION
 
 def checkDependencies():
@@ -79,7 +82,11 @@ def findAWSTool():
                 global AWS_TOOL_PATH, AWS_EXEC_PREFIX
                 AWS_TOOL_PATH = f
                 AWS_EXEC_PREFIX = (AWS_TOOL_PATH,) + AWS_EXEC_PREFIX
-                print('INFO: Found aws tool: %s' % AWS_TOOL_PATH)
+                print('INFO: Found aws tool: ' + AWS_TOOL_PATH)
+                configs = _getConfigs()
+                if 'region' in configs:
+                    print('INFO: Set region for aws tool: ' + configs['region'])
+                    AWS_EXEC_PREFIX += ('--region', configs['region'])
                 return
 
 def _getConfigs():
@@ -99,6 +106,20 @@ def _getConfigs():
             result = subprocess.run([AWS_TOOL_PATH, 'configure', 'get', param], stdout=subprocess.PIPE)
             if result.returncode == 0:
                 configs[param] = result.stdout.decode('UTF-8').strip()
+
+        if checkLocation():
+            print('INFO: Receiving configuration from the instance metadata')
+            json_data = _requestMetadata('dynamic/instance-identity/document')
+            data = None
+            if json_data is not None:
+                try:
+                    data = json.loads(json_data)
+                except json.decoder.JSONDecodeError:
+                    print('ERROR: Unable to parse the instance json metadata: %s' % json_data)
+                    pass
+
+            if data is not None:
+                configs['region'] = configs.get('region', data['region'])
 
         AWS_CONFIGS = configs
 
@@ -154,35 +175,14 @@ def _createRoles():
         }],
     }
 
-    # Create blendnet-manager role
-    try:
-        _executeAwsTool('iam', 'create-role',
-                        '--role-name', 'blendnet-manager',
-                        '--description', 'Automatically created by BlendNet',
-                        '--assume-role-policy-document', json.dumps(role_doc))
-        print('INFO: Creating the instance profile for role blendnet-manager')
-        # Those perms could be neared down - but I think it's too much for now
-        _executeAwsTool('iam', 'attach-role-policy',
-                        '--role-name', 'blendnet-manager',
-                        '--policy-arn', 'arn:aws:iam::aws:policy/AmazonEC2FullAccess')
-        _executeAwsTool('iam', 'attach-role-policy',
-                        '--role-name', 'blendnet-manager',
-                        '--policy-arn', 'arn:aws:iam::aws:policy/AmazonS3FullAccess')
-        _executeAwsTool('iam', 'create-instance-profile',
-                        '--instance-profile-name', 'blendnet-manager')
-        _executeAwsTool('iam', 'add-role-to-instance-profile',
-                        '--instance-profile-name', 'blendnet-manager',
-                        '--role-name', 'blendnet-manager')
-    except AwsToolException:
-        # The blendnet-manager role is already exists
-        pass
-
     # Create blendnet-agent role
     try:
         _executeAwsTool('iam', 'create-role',
                         '--role-name', 'blendnet-agent',
                         '--description', 'Automatically created by BlendNet',
                         '--assume-role-policy-document', json.dumps(role_doc))
+        _executeAwsTool('iam', 'wait', 'role-exists',
+                        '--role-name', 'blendnet-agent')
         print('INFO: Creating the instance profile for role blendnet-agent')
         _executeAwsTool('iam', 'attach-role-policy',
                         '--role-name', 'blendnet-agent',
@@ -192,15 +192,64 @@ def _createRoles():
         _executeAwsTool('iam', 'add-role-to-instance-profile',
                         '--instance-profile-name', 'blendnet-agent',
                         '--role-name', 'blendnet-agent')
+        _executeAwsTool('iam', 'wait', 'instance-profile-exists',
+                        '--instance-profile-name', 'blendnet-agent')
     except AwsToolException:
         # The blendnet-agent role is already exists
         pass
 
+    # Create blendnet-manager role
+    try:
+        _executeAwsTool('iam', 'create-role',
+                        '--role-name', 'blendnet-manager',
+                        '--description', 'Automatically created by BlendNet',
+                        '--assume-role-policy-document', json.dumps(role_doc))
+        print('INFO: Creating the instance profile for role blendnet-manager')
+        _executeAwsTool('iam', 'wait', 'role-exists',
+                        '--role-name', 'blendnet-manager')
+        # Those perms could be neared down - but I think it's too much for now
+        _executeAwsTool('iam', 'attach-role-policy',
+                        '--role-name', 'blendnet-manager',
+                        '--policy-arn', 'arn:aws:iam::aws:policy/AmazonEC2FullAccess')
+        _executeAwsTool('iam', 'attach-role-policy',
+                        '--role-name', 'blendnet-manager',
+                        '--policy-arn', 'arn:aws:iam::aws:policy/AmazonS3FullAccess')
+        # Allow blendnet-manager to use blendnet-agent instance profile and role
+        agent_instance_profile = _executeAwsTool('iam', 'get-instance-profile',
+                                                 '--instance-profile-name', 'blendnet-agent',
+                                                 '--query', 'InstanceProfile')
+        policy_doc = {
+            "Statement": [{
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": [
+                    agent_instance_profile['Arn'],
+                    agent_instance_profile['Roles'][0]['Arn'],
+                ],
+            }],
+        }
+        _executeAwsTool('iam', 'put-role-policy',
+                        '--role-name', 'blendnet-manager',
+                        '--policy-name', 'allow_use_blendnet-agent',
+                        '--policy-document', json.dumps(policy_doc))
+        _executeAwsTool('iam', 'create-instance-profile',
+                        '--instance-profile-name', 'blendnet-manager')
+        _executeAwsTool('iam', 'add-role-to-instance-profile',
+                        '--instance-profile-name', 'blendnet-manager',
+                        '--role-name', 'blendnet-manager')
+        _executeAwsTool('iam', 'wait', 'instance-profile-exists',
+                        '--instance-profile-name', 'blendnet-manager')
+        # If it's not wait - we will see the next error during manager allocation
+        # Value (blendnet-manager) for parameter iamInstanceProfile.name is invalid. Invalid IAM Instance Profile name
+        time.sleep(30)
+    except AwsToolException:
+        # The blendnet-manager role is already exists
+        pass
+
 def _getImageAmi(name = 'debian-10-amd64-daily-*'):
     '''Gets the latest image per name filter'''
-
     data = _executeAwsTool('ec2', 'describe-images',
-                           '--filters', 'Name=name,Values=' + name,
+                           '--filters', json.dumps([{'Name':'name','Values': [name]}]),
                            '--query', 'sort_by(Images, &CreationDate)[].[Name,ImageId,BlockDeviceMappings[0].DeviceName][-1]')
     print('INFO: Got image %s' % (data[1],))
     return (data[1], data[2])
@@ -208,9 +257,10 @@ def _getImageAmi(name = 'debian-10-amd64-daily-*'):
 def _getInstanceId(instance_name):
     '''Gets the instance id based on the tag Name'''
     data = _executeAwsTool('ec2', 'describe-instances',
-                           '--filters', 'Name=tag:Name,Values='+instance_name,
-                           # Ignore terminated instances
-                           '--filters', 'Name=instance-state-name,Values=pending,running,shutting-down,stopping,stopped',
+                           '--filters', json.dumps([
+                              {'Name':'tag:Name','Values': [instance_name]},
+                              {'Name':'instance-state-name','Values': ['pending','running','shutting-down','stopping','stopped']},
+                           ]),
                            '--query', 'Reservations[].Instances[].InstanceId')
     if len(data) != 1:
         raise AwsToolException('Error in request of unique instance id with name "%s": %s' % (instance_name, data))
@@ -326,7 +376,7 @@ systemctl start blendnet-manager.service
     _executeAwsTool('ec2', 'wait', 'instance-running',
                     '--instance-ids', data['Instances'][0]['InstanceId'])
 
-    return True
+    return data['Instances'][0]['InstanceId']
 
 def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
@@ -371,6 +421,9 @@ def createInstanceAgent(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-agent"}',
         '--block-device-mappings', json.dumps(disk_config),
+        # DEBUG TODO: Remove
+        '--key-name', 'default_key',
+        '--security-groups', 'blendnet-agent',
         '--user-data', 'file://' + startup_script_file.name,
     ]
 
@@ -442,32 +495,29 @@ systemctl start blendnet-agent.service
     _executeAwsTool('ec2', 'wait', 'instance-running',
                     '--instance-ids', data['Instances'][0]['InstanceId'])
 
-    return True
+    return data['Instances'][0]['InstanceId']
 
-def startInstance(instance_name):
+def startInstance(instance_id):
     '''Start stopped instance with specified name'''
 
-    instance_id = _getInstanceId(instance_name)
     _executeAwsTool('ec2', 'start-instances',
                     '--instance-ids', instance_id)
     # Waiting for the operation to completed
     _executeAwsTool('ec2', 'wait', 'instance-running',
                     '--instance-ids', instance_id)
 
-def stopInstance(instance_name):
+def stopInstance(instance_id):
     '''Stop instance with specified name'''
 
-    instance_id = _getInstanceId(instance_name)
     _executeAwsTool('ec2', 'stop-instances',
                     '--instance-ids', instance_id)
     # Waiting for the operation to completed
     _executeAwsTool('ec2', 'wait', 'instance-stopped',
                     '--instance-ids', instance_id)
 
-def deleteInstance(instance_name):
+def deleteInstance(instance_id):
     '''Delete the instance with specified name'''
 
-    instance_id = _getInstanceId(instance_name)
     _executeAwsTool('ec2', 'terminate-instances',
                     '--instance-ids', instance_id)
     # Waiting for the operation to completed
@@ -476,15 +526,14 @@ def deleteInstance(instance_name):
 
 def createFirewall(target_group, port):
     '''Create minimal firewall to access external IP of manager/agent'''
-    # Skipping blendnet-agent
-    if target_group == 'blendnet-agent':
-        return
 
     # Create the security group
     try:
         _executeAwsTool('ec2', 'create-security-group',
                         '--group-name', target_group,
                         '--description', 'Automatically created by BlendNet')
+        print('INFO: Creating security group for %s' % (target_group,))
+        # DEBUG TODO: Remove ssh access
         _executeAwsTool('ec2', 'authorize-security-group-ingress',
                         '--group-name', target_group,
                         '--protocol', 'tcp',
@@ -494,7 +543,7 @@ def createFirewall(target_group, port):
                         '--group-name', target_group,
                         '--protocol', 'tcp',
                         '--port', str(port),
-                        '--cidr', '0.0.0.0/0')
+                        '--cidr', '172.0.0.0/8' if target_group == 'blendnet-agent' else '0.0.0.0/0')
         # Waiting for the operation to completed
         _executeAwsTool('ec2', 'wait', 'security-group-exists',
                         '--group-names', target_group)
@@ -562,6 +611,7 @@ def getResources(session_id):
         try:
             name = [ tag['Value'] for tag in it['Tags'] if tag['Key'] == 'Name' ][0]
             return {
+                'id': it.get('InstanceId'),
                 'name': name,
                 'ip': it.get('PublicIpAddress'),
                 'internal_ip': it['PrivateIpAddress'],
@@ -574,9 +624,10 @@ def getResources(session_id):
             return None
 
     data = _executeAwsTool('ec2', 'describe-instances',
-                           '--filters', 'Name=tag:Session,Values='+session_id,
-                           # Ignore terminated instances
-                           '--filters', 'Name=instance-state-name,Values=pending,running,shutting-down,stopping,stopped',
+                           '--filters', json.dumps([
+                              {'Name':'tag:Session','Values': [session_id]},
+                              {'Name':'instance-state-name','Values': ['pending','running','shutting-down','stopping','stopped']},
+                           ]),
                            '--query', 'Reservations[].Instances[]')
 
     for it in data:
@@ -587,7 +638,7 @@ def getResources(session_id):
         if it_type == 'manager':
             out['manager'] = inst
         elif it_type == 'agent':
-            out['agents'][inst['name']] = inst
+            out['agents'][inst['id']] = inst
         else:
             print('WARN: Unknown type resource instance %s' % inst['name'])
 
