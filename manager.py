@@ -1,6 +1,6 @@
 #!/usr/bin/python3.7
 # -*- coding: UTF-8 -*-
-'''BlendNet Manager REST v0.1
+'''BlendNet Manager REST
 
 Description: REST interface for Manager
 '''

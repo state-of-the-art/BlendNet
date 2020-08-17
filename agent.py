@@ -1,6 +1,6 @@
 #!/usr/bin/python3.7
 # -*- coding: UTF-8 -*-
-'''BlendNet Agent REST v0.1
+'''BlendNet Agent REST
 
 Description: REST interface for Agent
 '''

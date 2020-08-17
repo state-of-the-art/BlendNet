@@ -10,6 +10,7 @@ bl_info = {
     'wiki_url': 'https://github.com/state-of-the-art/BlendNet/wiki',
     'tracker_url': 'https://github.com/state-of-the-art/BlendNet/issues',
     'category': 'Render',
+    'warning': 'development version',
 }
 
 if 'bpy' in locals():
