@@ -162,3 +162,7 @@ def setupBucket(bucket_name, cfg):
     uploadDataToBucket(json.dumps(cfg).encode('utf-8'), bucket_name, 'work_manager/manager.json')
 
     workers.wait()
+
+def getPrice(inst_type):
+    '''Return the price of the instance type per hour'''
+    return _execProviderFunc('getPrice', -1.0, inst_type)
