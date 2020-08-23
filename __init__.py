@@ -87,6 +87,12 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         update = lambda self, context: BlendNet.addon.genSID(self, 'session_id'),
     )
 
+    manager_instance_type: EnumProperty(
+        name = 'Manager size',
+        description = 'Selected manager instance size',
+        items = BlendNet.addon.fillAvailableInstanceTypesManager,
+    )
+
     manager_address: StringProperty(
         name = 'Address',
         description = 'If you using the existing Manager service put address here '
@@ -115,6 +121,20 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         maxlen = 128,
         default = '',
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'manager_password'),
+    )
+
+    manager_agent_instance_type: EnumProperty(
+        name = 'Agent size',
+        description = 'Selected agent instance size',
+        items = BlendNet.addon.fillAvailableInstanceTypesAgent,
+    )
+
+    manager_agents_max: IntProperty(
+        name = 'Agents max',
+        description = 'Maximum number of agents in Manager\'s pool',
+        min = 1,
+        max = 65535,
+        default = 3,
     )
 
     agent_use_cheap_instance: BoolProperty(
@@ -226,26 +246,13 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             row.prop(self, 'agent_password')
 
 class BlendNetSceneSettings(bpy.types.PropertyGroup):
-    manager_instance_type: EnumProperty(
-        name = 'Manager size',
-        description = 'Selected manager instance size',
-        items = BlendNet.addon.fillAvailableInstanceTypesManager,
-    )
-
-    manager_agents_max: IntProperty(
-        name = 'Agents max',
-        description = 'Maximum number of agents in Manager\'s pool',
-        min = 1,
+    scene_memory_req: IntProperty(
+        name = 'Scene RAM to render',
+        description = 'Required memory to render the scene in GB',
+        min = 0,
         max = 65535,
-        default = 3,
+        default = 0,
     )
-
-    manager_agent_instance_type: EnumProperty(
-        name = 'Agent size',
-        description = 'Selected agent instance size',
-        items = BlendNet.addon.fillAvailableInstanceTypesAgent,
-    )
-
 
     @classmethod
     def register(cls):
@@ -893,12 +900,20 @@ class BlendNetRenderPanel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         wm = context.window_manager
+        bn = context.scene.blendnet
         prefs = context.preferences.addons[__package__].preferences
 
         box = layout.box()
         row = box.row()
         row.label(text='BlendNet Render (%s)' % (prefs.cloud_provider,))
         row.label(text=context.window_manager.blendnet.status)
+        row = box.row()
+        row.use_property_split = True
+        row.use_property_decorate = False # No prop animation
+        row.prop(bn, 'scene_memory_req', text='Scene required RAM (GB)')
+
+        if not BlendNet.addon.checkAgentMemIsEnough():
+            box.label(text='WARN: Agent does not have enough memory to render the scene', icon='ERROR')
         if not prefs.agent_use_cheap_instance:
             box.label(text='WARN: No cheap VMs available, check addon settings', icon='ERROR')
         if not BlendNet.addon.checkProviderIsGood(prefs.cloud_provider):
@@ -934,11 +949,11 @@ class BlendNetManagerPanel(bpy.types.Panel):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False # No prop animation
-        bn = context.scene.blendnet
+        prefs = bpy.context.preferences.addons[__package__].preferences
 
         row = layout.row()
         row.enabled = not BlendNet.addon.isManagerCreated()
-        row.prop(bn, 'manager_instance_type', text='Type')
+        row.prop(prefs, 'manager_instance_type', text='Type')
 
         manager_info = BlendNet.addon.getResources(context).get('manager')
         if manager_info:
@@ -982,13 +997,13 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False # No prop animation
-        bn = context.scene.blendnet
+        prefs = bpy.context.preferences.addons[__package__].preferences
 
         layout.enabled = not BlendNet.addon.isManagerStarted()
         row = layout.row()
-        row.prop(bn, 'manager_agent_instance_type', text='Agents type')
+        row.prop(prefs, 'manager_agent_instance_type', text='Agents type')
         row = layout.row()
-        row.prop(bn, 'manager_agents_max', text='Agents max')
+        row.prop(prefs, 'manager_agents_max', text='Agents max')
 
 class BlendNetRenderEngine(bpy.types.RenderEngine):
     '''Continuous render engine to allow switch between tasks'''

@@ -93,10 +93,10 @@ def getConfig():
     cfg['auth_user'] = prefs.manager_user
     cfg['auth_password'] = prefs.manager_password_hidden
     cfg['instance_name'] = providers.getManagerName(cfg['session_id'])
-    cfg['instance_type'] = bn.manager_instance_type
+    cfg['instance_type'] = prefs.manager_instance_type
 
-    cfg['agents_max'] = bn.manager_agents_max
-    cfg['agent_instance_type'] = bn.manager_agent_instance_type
+    cfg['agents_max'] = prefs.manager_agents_max
+    cfg['agent_instance_type'] = prefs.manager_agent_instance_type
     cfg['agent_use_cheap_instance'] = prefs.agent_use_cheap_instance
     cfg['agent_listen_port'] = prefs.agent_port
     cfg['agent_auth_user'] = prefs.agent_user
@@ -165,6 +165,7 @@ def getProviderInfo(context = None):
 
 
 available_instance_types_cache = [[], '']
+available_instance_types_mem_cache = [{}]
 
 def fillAvailableInstanceTypes(scene, context):
     '''Cached agent available types list for the UI interface'''
@@ -177,9 +178,12 @@ def fillAvailableInstanceTypes(scene, context):
         if available_instance_types_cache[1] == provider:
             keys = naturalSort(result.keys())
             out = []
+            out_mem = {}
             for key in keys:
-                out.append( (key, key, result[key]) )
+                out.append( (key, key, result[key][0]) )
+                out_mem[key] = result[key][1]
             available_instance_types_cache[0] = out
+            available_instance_types_mem_cache[0] = out_mem
         if area:
             area.tag_redraw()
 
@@ -637,3 +641,9 @@ def updateBlenderDistProp(version = None):
         prefs.blender_dist = version
     prefs.blender_dist_url = available_blender_dists_cache[version]['url']
     prefs.blender_dist_checksum = available_blender_dists_cache[version]['checksum']
+
+def checkAgentMemIsEnough():
+    '''Making sure the current agent type have enough memory to render the scene'''
+    bn = bpy.context.scene.blendnet
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    return available_instance_types_mem_cache[0].get(prefs.manager_agent_instance_type, 0) >= bn.scene_memory_req
