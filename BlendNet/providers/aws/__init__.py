@@ -1,6 +1,6 @@
 '''Amazon Web Services
 Provide API access to allocate required resources in AWS
-Dependencies: boto3
+Dependencies: aws cli v2
 '''
 
 # Exception to notify that the command returned exitcode != 0
@@ -658,6 +658,27 @@ def getManagerName(session_id):
 def getAgentsNamePrefix(session_id):
     return 'blendnet-%s-agent-' % session_id
 
+def getPrice(inst_type):
+    '''Returns the price of the instance type per hour for the current region'''
+    configs = _getConfigs()
+    url = 'https://a0.p.awsstatic.com/pricing/1.0/ec2/region/%s/ondemand/linux/index.json' % (configs['region'],)
+    req = urllib.request.Request(url)
+    try:
+        while True:
+            with urllib.request.urlopen(req, timeout=5) as res:
+                if res.getcode() == 503:
+                    print('WARN: Unable to reach price url')
+                    time.sleep(5)
+                    continue
+                data = json.load(res)
+                for d in data['prices']:
+                    if d['attributes']['aws:ec2:instanceType'] == inst_type:
+                        # Could be USD or CNY in China
+                        return float(list(d['price'].values())[0])
+                return -1.0
+    except Exception as e:
+        print('WARN: Error during getting the instance type price: ' + url)
+        return -1.0
 
 findAWSTool()
 
