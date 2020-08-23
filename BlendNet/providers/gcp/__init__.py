@@ -157,10 +157,10 @@ def _verifyQuotas(avail):
 
     errors = []
 
-    manager_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_instance_type)
-    agents_info = _getInstanceTypeInfo(bpy.context.scene.blendnet.manager_agent_instance_type)
-    agents_num = bpy.context.scene.blendnet.manager_agents_max
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    manager_info = _getInstanceTypeInfo(prefs.manager_instance_type)
+    agents_info = _getInstanceTypeInfo(prefs.manager_agent_instance_type)
+    agents_num = prefs.manager_agents_max
 
     # Manager
     if manager_info:
@@ -251,7 +251,7 @@ def getInstanceTypes():
     try:
         compute, configs = _getCompute(), _getConfigs()
         resp = compute.machineTypes().list(project=configs['project'], zone=configs['zone']).execute()
-        return dict([ (d['name'], d['description']) for d in resp['items'] ])
+        return dict([ (d['name'], (d['description'], d['memoryMb']/1024.0)) for d in resp['items'] ])
     except:
         return {'ERROR': 'Looks like access to the compute API is restricted '
                          '- please check your permissions'}
