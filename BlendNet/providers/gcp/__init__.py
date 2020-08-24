@@ -24,6 +24,8 @@ GOOGLE_CLOUD_SDK_ROOT = None
 GOOGLE_CLOUD_SDK_CREDS = None
 GOOGLE_CLOUD_SDK_CONFIGS = None
 
+_PRICE_CACHE = { 'data':[], 'update': 0, 'usage': None }
+
 def _requestMetadata(path):
     req = urllib.request.Request(METADATA_URL+path)
     req.add_header(*METADATA_HEADER)
@@ -138,13 +140,18 @@ def _getStorage():
     import googleapiclient.discovery
     return googleapiclient.discovery.build('storage', 'v1', credentials=creds)
 
+def _getBilling():
+    creds = _getCreds()
+    import googleapiclient.discovery
+    return googleapiclient.discovery.build('cloudbilling', 'v1', credentials=creds)
+
 def _getInstanceTypeInfo(name):
     '''Get info about the instance type'''
     try:
         compute, configs = _getCompute(), _getConfigs()
         resp = compute.machineTypes().get(project=configs['project'], zone=configs['zone'], machineType=name).execute()
         return { 'cpu': resp['guestCpus'], 'mem': resp['memoryMb'] }
-    finally:
+    except:
         print('ERROR: Unable to get the GCP machine type info for:', name)
 
     return None
@@ -743,6 +750,80 @@ def getManagerName(session_id):
 
 def getAgentsNamePrefix(session_id):
     return 'blendnet-%s-agent-' % session_id
+
+def getPrice(inst_type):
+    '''Returns the price of the instance type per hour for the current region'''
+    global _PRICE_CACHE
+
+    inst_info = _getInstanceTypeInfo(inst_type)
+    if not inst_info:
+        return -1.0
+
+    usage_type = 'OnDemand'
+    try:
+        import bpy
+        prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+        if prefs.agent_use_cheap_instance:
+            usage_type = 'Preemptible'
+    except:
+        print('WARN: Unable to get cheap property - only OnDemand price is available')
+
+    desc_check = set()
+    if inst_type == 'g1-small':
+        desc_check.add('Small ')
+    elif inst_type == 'f1-micro':
+        desc_check.add('Micro ')
+    elif inst_type.startswith('c2-'):
+        desc_check.add('Compute optimized ')
+    elif inst_type.startswith('m2-'):
+        desc_check.add('Memory-Optimized ')
+    else:
+        desc_check.add(inst_type.split('-')[0].upper() + ' ')
+
+    if _PRICE_CACHE['update'] < time.time() or _PRICE_CACHE['usage'] != usage_type:
+        print('DEBUG: Update price cache')
+        _PRICE_CACHE['data'] = []
+        _PRICE_CACHE['usage'] = usage_type
+        bill, configs = _getBilling(), _getConfigs()
+        #req = bill.services().list() 'businessEntityName': 'businessEntities/GCP'
+        req = bill.services().skus().list(parent='services/6F81-5844-456A')
+        while req is not None:
+            resp = req.execute()
+            for it in resp.get('skus', []):
+                if configs['region'] not in it.get('serviceRegions', []):
+                    continue
+                if it.get('category', {}).get('usageType') != usage_type:
+                    continue
+                if it.get('category', {}).get('resourceFamily') in ('Network', 'Storage'):
+                    continue
+                if it.get('category', {}).get('resourceGroup') in ('GPU',):
+                    continue
+                if 'Custom ' in it.get('description') or 'Sole Tenancy ' in it.get('description'):
+                    continue
+                if ' Premium ' in it.get('description'):
+                    continue
+                _PRICE_CACHE['data'].append(it)
+            req = bill.services().skus().list_next(previous_request=req, previous_response=resp)
+
+        print('DEBUG: Updated price cache: ' + str(len(_PRICE_CACHE['data'])))
+        _PRICE_CACHE['update'] = time.time() + 60*60
+
+    out_price = 0
+
+    for it in _PRICE_CACHE['data']:
+        if not all([ check in it.get('description') for check in desc_check ]):
+            continue
+        exp = it.get('pricingInfo', [{}])[0].get('pricingExpression', {})
+        price_def = exp.get('tieredRates', [{}])[0].get('unitPrice', {})
+        price = float(price_def.get('unit', '0')) + price_def.get('nanos', 0)/1000000000.0
+        if ' Core ' in it.get('description'):
+            print('DEBUG: Price adding CPU: ' + str(price * inst_info['cpu']))
+            out_price += price * inst_info['cpu']
+        elif ' Ram ' in it.get('description'):
+            print('DEBUG: Price adding MEM: ' + str(price * (inst_info['mem'] / 1024.0)))
+            out_price += price * (inst_info['mem'] / 1024.0)
+
+    return out_price
 
 findGoogleCloudSdk()
 
