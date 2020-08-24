@@ -157,7 +157,7 @@ def getInstanceTypes():
     try:
         data = _executeAwsTool('ec2', 'describe-instance-types',
                                '--query', 'InstanceTypes[].[InstanceType, VCpuInfo.DefaultVCpus, MemoryInfo.SizeInMiB] | sort_by(@, &[0])')
-        return dict([ (d[0], '%s vCPUs %s GB RAM' % (d[1], d[2])) for d in data ])
+        return dict([ (d[0], ('%s vCPUs %s GB RAM' % (d[1], d[2]/1024.0), d[2]/1024.0)) for d in data ])
     except AwsToolException as e:
         return {'ERROR': 'Looks like access to the API is restricted '
                          '- please check your permissions: %s' % e}
