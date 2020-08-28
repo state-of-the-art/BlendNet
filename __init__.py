@@ -143,6 +143,14 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         default = True,
     )
 
+    agent_cheap_multiplier: EnumProperty(
+        name = 'Cheap multiplier',
+        description = 'Way to choose the price to get a cheap VM. '
+            'Some providers allows to choose the maximum price for the instance '
+            'and it could be calculated from the ondemand (max) price multiplied by this value.',
+        items = BlendNet.addon.getCheapMultiplierList,
+    )
+
     agent_port: IntProperty(
         name = 'Port',
         description = 'TLS tcp port to communicate Manager with Agent service',
@@ -224,6 +232,14 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             box_box = box.box()
             box_box.label(text='Manager')
             row = box_box.row()
+            row.prop(self, 'manager_instance_type', text='Type')
+            row = box_box.row()
+            if BlendNet.addon.getManagerPrice(self.manager_instance_type) < 0.0:
+                row.label(text='WARNING: Unable to find price for the type "%s"' % (self.manager_instance_type,))
+            else:
+                row.label(text='Calculated price: ~%f/Hour (USD or region currency)' %
+                    BlendNet.addon.getManagerPrice(self.manager_instance_type))
+            row = box_box.row()
             row.prop(self, 'manager_address')
             row.enabled = False # TODO: remove it when functionality will be available
             row = box_box.row()
@@ -238,6 +254,18 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             row.prop(self, 'agent_use_cheap_instance')
             if 'Cheap instances not available' in provider_info.get('ERRORS', []):
                 row.enabled = False
+            else:
+                row.prop(self, 'agent_cheap_multiplier')
+            row = box_box.row()
+            row.enabled = not BlendNet.addon.isManagerCreated()
+            row.prop(self, 'manager_agent_instance_type', text='Agents type')
+            row.prop(self, 'manager_agents_max', text='Agents max')
+            row = box_box.row()
+            if BlendNet.addon.getAgentPrice(self.manager_agent_instance_type) < 0.0:
+                row.label(text='WARNING: Unable to find price for the type "%s"' % (self.manager_agent_instance_type,))
+            else:
+                row.label(text='Calculated combined price: ~%f/Hour (USD or region currency)' %
+                    (BlendNet.addon.getAgentPrice(self.manager_agent_instance_type) * self.manager_agents_max))
             row = box_box.row()
             row.prop(self, 'agent_port')
             row = box_box.row()

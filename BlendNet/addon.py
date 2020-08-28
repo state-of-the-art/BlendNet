@@ -646,3 +646,40 @@ def checkAgentMemIsEnough():
     bn = bpy.context.scene.blendnet
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
     return available_instance_types_mem_cache[0].get(prefs.manager_agent_instance_type, 0) >= bn.scene_memory_req
+
+
+def getCheapMultiplierList(scene = None, context = None):
+    l = providers.getCheapMultiplierList()
+    return [ (str(v),str(v),str(v)) for v in l ]
+
+
+instance_type_price_manager_cache = [0.0, '']
+
+def getManagerPrice(inst_type):
+    global instance_type_price_manager_cache
+    if instance_type_price_manager_cache[1] == inst_type:
+        return instance_type_price_manager_cache[0]
+
+    instance_type_price_manager_cache[0] = providers.getPrice(inst_type, 1.0)
+    instance_type_price_manager_cache[1] = inst_type
+
+    return instance_type_price_manager_cache[0]
+
+
+instance_type_price_agent_cache = [0.0, '', None]
+
+def getAgentPrice(inst_type):
+    global instance_type_price_agent_cache
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    if instance_type_price_agent_cache[1] == inst_type and instance_type_price_agent_cache[2] == prefs.agent_use_cheap_instance:
+        return instance_type_price_agent_cache[0]
+
+    cheap_multiplier = 1.0
+    if prefs.agent_use_cheap_instance:
+        cheap_multiplier = float(prefs.agent_cheap_multiplier)
+    instance_type_price_agent_cache[0] = providers.getPrice(inst_type, cheap_multiplier)
+    instance_type_price_agent_cache[1] = inst_type
+    instance_type_price_agent_cache[2] = prefs.agent_use_cheap_instance
+
+    return instance_type_price_agent_cache[0]
+

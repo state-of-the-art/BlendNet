@@ -12,6 +12,8 @@ import sys
 import json
 import platform
 import tempfile
+import ssl
+import site
 import urllib.request
 import subprocess
 
@@ -658,14 +660,31 @@ def getManagerName(session_id):
 def getAgentsNamePrefix(session_id):
     return 'blendnet-%s-agent-' % session_id
 
-def getPrice(inst_type):
+def getCheapMultiplierList():
+    '''AWS supports spot instances which is market based on spot price'''
+    return [0.3] + [ i/100.0 for i in range(1, 100) ]
+
+def getPrice(inst_type, cheap_multiplier):
     '''Returns the price of the instance type per hour for the current region'''
     configs = _getConfigs()
+
+    ctx = ssl.create_default_context()
+    for path in site.getsitepackages():
+        path = os.path.join(path, 'certifi', 'cacert.pem')
+        if not os.path.exists(path):
+            continue
+        ctx.load_verify_locations(cafile=path)
+        break
+
+    if len(ctx.get_ca_certs()) == 0:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
     url = 'https://a0.p.awsstatic.com/pricing/1.0/ec2/region/%s/ondemand/linux/index.json' % (configs['region'],)
     req = urllib.request.Request(url)
     try:
         while True:
-            with urllib.request.urlopen(req, timeout=5) as res:
+            with urllib.request.urlopen(req, timeout=5, context=ctx) as res:
                 if res.getcode() == 503:
                     print('WARN: Unable to reach price url')
                     time.sleep(5)
@@ -674,10 +693,10 @@ def getPrice(inst_type):
                 for d in data['prices']:
                     if d['attributes']['aws:ec2:instanceType'] == inst_type:
                         # Could be USD or CNY in China
-                        return float(list(d['price'].values())[0])
+                        return float(list(d['price'].values())[0]) * cheap_multiplier
                 return -1.0
     except Exception as e:
-        print('WARN: Error during getting the instance type price: ' + url)
+        print('WARN: Error during getting the instance type price:', url, e)
         return -1.0
 
 findAWSTool()
