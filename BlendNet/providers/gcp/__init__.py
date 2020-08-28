@@ -378,13 +378,13 @@ systemctl start blendnet-manager.service # We don't need "enable" here
         'serviceAccounts': [{
             'email': 'default', # TODO: add a way to use specified service account
             'scopes': [
-              'https://www.googleapis.com/auth/compute',
-              'https://www.googleapis.com/auth/servicecontrol',
-              'https://www.googleapis.com/auth/service.management.readonly',
-              'https://www.googleapis.com/auth/logging.write',
-              'https://www.googleapis.com/auth/monitoring.write',
-              'https://www.googleapis.com/auth/trace.append',
-              'https://www.googleapis.com/auth/devstorage.full_control',
+                'https://www.googleapis.com/auth/compute',
+                'https://www.googleapis.com/auth/servicecontrol',
+                'https://www.googleapis.com/auth/service.management.readonly',
+                'https://www.googleapis.com/auth/logging.write',
+                'https://www.googleapis.com/auth/monitoring.write',
+                'https://www.googleapis.com/auth/trace.append',
+                'https://www.googleapis.com/auth/devstorage.full_control',
             ],
         }],
         'metadata': {
@@ -751,7 +751,11 @@ def getManagerName(session_id):
 def getAgentsNamePrefix(session_id):
     return 'blendnet-%s-agent-' % session_id
 
-def getPrice(inst_type):
+def getCheapMultiplierList():
+    '''GCP supports preemptible instances which are 0.3 price of regular instance'''
+    return [ 0.3 ]
+
+def getPrice(inst_type, cheap_multiplier):
     '''Returns the price of the instance type per hour for the current region'''
     global _PRICE_CACHE
 
@@ -760,13 +764,8 @@ def getPrice(inst_type):
         return -1.0
 
     usage_type = 'OnDemand'
-    try:
-        import bpy
-        prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
-        if prefs.agent_use_cheap_instance:
-            usage_type = 'Preemptible'
-    except:
-        print('WARN: Unable to get cheap property - only OnDemand price is available')
+    if cheap_multiplier < 1.0:
+        usage_type = 'Preemptible'
 
     desc_check = set()
     if inst_type == 'g1-small':

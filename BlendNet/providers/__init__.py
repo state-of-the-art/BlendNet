@@ -163,6 +163,10 @@ def setupBucket(bucket_name, cfg):
 
     workers.wait()
 
-def getPrice(inst_type):
+def getCheapMultiplierList():
+    '''Returns the list of available multipliers to get the right price'''
+    return _execProviderFunc('getCheapMultiplierList', [])
+
+def getPrice(inst_type, cheap_multiplier):
     '''Return the price of the instance type per hour'''
-    return _execProviderFunc('getPrice', -1.0, inst_type)
+    return _execProviderFunc('getPrice', -1.0, inst_type, cheap_multiplier)
