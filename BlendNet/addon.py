@@ -551,7 +551,7 @@ def fillAvailableBlenderDists(scene = None, context = None):
             try:
                 # Getting the first layer of mirror list
                 parser = LinkHTMLParser()
-                with urlopen(url, timeout=1, context=ctx) as f:
+                with urlopen(url, timeout=5, context=ctx) as f:
                     parser.feed(f.read().decode())
 
                 # Processing links of the first layer
@@ -564,18 +564,23 @@ def fillAvailableBlenderDists(scene = None, context = None):
                     if ver >= 280: # >= 2.80 is supported
                         dirs.append(l)
 
+                # Process the versions from latest to oldest
+                dirs.reverse()
+
                 # Getting lists of the specific dirs
                 for d in dirs:
-                    with urlopen(url+d, timeout=1, context=ctx) as f:
+                    with urlopen(url+d, timeout=5, context=ctx) as f:
                         parser.feed(f.read().decode())
 
                     # Processing links of the dirs
                     links = parser.links()
+                    # Process the versions from latest to oldest
+                    links.reverse()
                     for l in links:
                         if not l.endswith('.sha256'):
                             continue
                         # Getting the file and search for linux dist there
-                        with urlopen(url+d+l, timeout=1, context=ctx) as f:
+                        with urlopen(url+d+l, timeout=5, context=ctx) as f:
                             for line in f:
                                 sha256, name = line.decode().strip().split()
                                 if '-linux' not in name or '64.tar' not in name:
