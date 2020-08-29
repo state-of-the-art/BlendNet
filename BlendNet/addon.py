@@ -377,17 +377,24 @@ def requestManagerInfo(context = None):
 
 def startManager(cfg = None):
     cfg = cfg if cfg else getConfig()
+    if cfg['agent_use_cheap_instance']:
+        # Calculate the agent max price according the current params
+        price = getAgentPrice(cfg['agent_instance_type'])
+        cfg['agent_instance_max_price'] = price[0]
+        if cfg['agent_instance_max_price'] < 0.0:
+            print('ERROR: Unable to run Manager - unable to determine price of agent: ' + price[1])
+            return
 
     if not isManagerStarted():
         print('DEBUG: Running uploading to bucket')
         providers.setupBucket(cfg['bucket'], cfg)
 
     if not isManagerCreated():
-        print('DEBUG: Creating manager instance')
-        providers.createInstanceManager(cfg)
         print('DEBUG: Creating the required firewall rules')
         providers.createFirewall('blendnet-manager', cfg['listen_port'])
         providers.createFirewall('blendnet-agent', cfg['agent_listen_port'])
+        print('DEBUG: Creating manager instance')
+        providers.createInstanceManager(cfg)
         # TODO: Setup subnetwork to use internal google services
     elif isManagerStopped():
         print('DEBUG: Starting manager instance')
@@ -653,33 +660,86 @@ def getCheapMultiplierList(scene = None, context = None):
     return [ (str(v),str(v),str(v)) for v in l ]
 
 
-instance_type_price_manager_cache = [0.0, '']
+instance_type_price_manager_cache = [(0.0, 'LOADING...'), '']
 
 def getManagerPrice(inst_type):
     global instance_type_price_manager_cache
-    if instance_type_price_manager_cache[1] == inst_type:
-        return instance_type_price_manager_cache[0]
 
     instance_type_price_manager_cache[0] = providers.getPrice(inst_type, 1.0)
-    instance_type_price_manager_cache[1] = inst_type
 
     return instance_type_price_manager_cache[0]
 
+def getManagerPriceBG(inst_type, context = None):
+    def worker(callback):
+        getManagerPrice(inst_type)
 
-instance_type_price_agent_cache = [0.0, '', None]
+        if callback:
+            callback()
+
+    global instance_type_price_manager_cache
+    info = instance_type_price_manager_cache
+    if info[1] != inst_type:
+        instance_type_price_manager_cache[1] = inst_type
+        callback = context.area.tag_redraw if context and context.area else None
+        _runBackgroundWork(worker, callback)
+
+    return info[0]
+
+
+instance_type_price_agent_cache = [(0.0, 'LOADING...'), '', None, -1.0]
 
 def getAgentPrice(inst_type):
     global instance_type_price_agent_cache
-    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
-    if instance_type_price_agent_cache[1] == inst_type and instance_type_price_agent_cache[2] == prefs.agent_use_cheap_instance:
-        return instance_type_price_agent_cache[0]
 
     cheap_multiplier = 1.0
-    if prefs.agent_use_cheap_instance:
+    prefs = bpy.context.preferences.addons[__package__.split('.', 2)[0]].preferences
+    if prefs.agent_use_cheap_instance and prefs.agent_cheap_multiplier != '':
         cheap_multiplier = float(prefs.agent_cheap_multiplier)
     instance_type_price_agent_cache[0] = providers.getPrice(inst_type, cheap_multiplier)
-    instance_type_price_agent_cache[1] = inst_type
-    instance_type_price_agent_cache[2] = prefs.agent_use_cheap_instance
 
     return instance_type_price_agent_cache[0]
 
+def getAgentPriceBG(inst_type, context = None):
+    def worker(callback):
+        getAgentPrice(inst_type)
+
+        if callback:
+            callback()
+
+    global instance_type_price_agent_cache
+    info = instance_type_price_agent_cache
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    if info[1] != inst_type or info[2] != prefs.agent_use_cheap_instance and info[3] != prefs.agent_cheap_multiplier:
+        instance_type_price_agent_cache[1] = inst_type
+        instance_type_price_agent_cache[2] = prefs.agent_use_cheap_instance
+        instance_type_price_agent_cache[3] = prefs.agent_cheap_multiplier
+        callback = context.area.tag_redraw if context and context.area else None
+        _runBackgroundWork(worker, callback)
+
+    return info[0]
+
+
+instance_type_price_minimal_cache = [-1.0, '', 0]
+
+def getMinimalCheapPrice(inst_type):
+    global instance_type_price_minimal_cache
+    instance_type_price_minimal_cache[0] = providers.getMinimalCheapPrice(inst_type)
+
+    return instance_type_price_minimal_cache[0]
+
+def getMinimalCheapPriceBG(inst_type, context = None):
+    def worker(callback):
+        getMinimalCheapPrice(inst_type)
+
+        if callback:
+            callback()
+
+    global instance_type_price_minimal_cache
+    info = instance_type_price_minimal_cache
+    if info[1] != inst_type or time.time() > info[2]:
+        instance_type_price_minimal_cache[1] = inst_type
+        instance_type_price_minimal_cache[2] = time.time() + 600
+        callback = context.area.tag_redraw if context and context.area else None
+        _runBackgroundWork(worker, callback)
+
+    return info[0]

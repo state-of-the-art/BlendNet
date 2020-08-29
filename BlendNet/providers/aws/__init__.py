@@ -304,7 +304,7 @@ def createInstanceManager(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-manager"}',
         '--block-device-mappings', json.dumps(disk_config),
-        #'--key-name', 'default_key', # If you want to ssh to the instance (and change createFirewall func)
+        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
         '--security-groups', 'blendnet-manager',
         '--user-data', 'file://' + startup_script_file.name,
     ]
@@ -422,10 +422,21 @@ def createInstanceAgent(cfg):
         '--instance-type', cfg['instance_type'],
         '--iam-instance-profile', '{"Name":"blendnet-agent"}',
         '--block-device-mappings', json.dumps(disk_config),
-        #'--key-name', 'default_key', # If you want to ssh to the instance (and change createFirewall func)
+        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
         '--security-groups', 'blendnet-agent',
         '--user-data', 'file://' + startup_script_file.name,
     ]
+
+    if cfg['use_cheap_instance']:
+        print('INFO: Running cheap agent instance with max price %f' % (cfg['instance_max_price'],))
+        options.append('--instance-market-options')
+        options.append(json.dumps({
+            "MarketType": "spot",
+            "SpotOptions": {
+                "MaxPrice": str(cfg['instance_max_price']),
+                "SpotInstanceType": "one-time",
+            },
+        }))
 
     # TODO: make script overridable
     # TODO: too much hardcode here
@@ -534,6 +545,7 @@ def createFirewall(target_group, port):
                         '--description', 'Automatically created by BlendNet')
         print('INFO: Creating security group for %s' % (target_group,))
         # Rule to allow remote ssh to the instance
+        # if you enable it don't forget to remove the blendnet sec groups from AWS to recreate them
         #_executeAwsTool('ec2', 'authorize-security-group-ingress',
         #                '--group-name', target_group,
         #                '--protocol', 'tcp',
@@ -662,7 +674,7 @@ def getAgentsNamePrefix(session_id):
 
 def getCheapMultiplierList():
     '''AWS supports spot instances which is market based on spot price'''
-    return [0.3] + [ i/100.0 for i in range(1, 100) ]
+    return [0.33] + [ i/100.0 for i in range(1, 100) ]
 
 def getPrice(inst_type, cheap_multiplier):
     '''Returns the price of the instance type per hour for the current region'''
@@ -692,12 +704,26 @@ def getPrice(inst_type, cheap_multiplier):
                 data = json.load(res)
                 for d in data['prices']:
                     if d['attributes']['aws:ec2:instanceType'] == inst_type:
-                        # Could be USD or CNY in China
-                        return float(list(d['price'].values())[0]) * cheap_multiplier
-                return -1.0
+                        return (float(list(d['price'].values())[0]) * cheap_multiplier, list(d['price'].keys())[0])
+                return (-1.0, 'ERR: Unable to find the price')
     except Exception as e:
         print('WARN: Error during getting the instance type price:', url, e)
-        return -1.0
+        return (-1.0, 'ERR: ' + str(e))
+
+
+def getMinimalCheapPrice(inst_type):
+    '''Will check the spot history and retreive the latest minimal price'''
+    data = _executeAwsTool('ec2', 'describe-spot-price-history',
+                           '--instance-types', json.dumps([inst_type]),
+                           '--product-descriptions', json.dumps(['Linux/UNIX']),
+                           '--query', 'SpotPriceHistory[]')
+    min_prices = dict()
+    for it in data:
+        # First items in the list is latest
+        if it['AvailabilityZone'] not in min_prices:
+            min_prices[it['AvailabilityZone']] = float(it['SpotPrice'])
+
+    return min(min_prices.values())
 
 findAWSTool()
 

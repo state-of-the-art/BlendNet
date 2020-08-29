@@ -761,7 +761,7 @@ def getPrice(inst_type, cheap_multiplier):
 
     inst_info = _getInstanceTypeInfo(inst_type)
     if not inst_info:
-        return -1.0
+        return (-1.0, 'ERR: Instance type not found')
 
     usage_type = 'OnDemand'
     if cheap_multiplier < 1.0:
@@ -784,7 +784,7 @@ def getPrice(inst_type, cheap_multiplier):
         _PRICE_CACHE['data'] = []
         _PRICE_CACHE['usage'] = usage_type
         bill, configs = _getBilling(), _getConfigs()
-        #req = bill.services().list() 'businessEntityName': 'businessEntities/GCP'
+        #req = bill.services().list() 'businessEntityName': 'businessEntities/GCP' = 'services/6F81-5844-456A'
         req = bill.services().skus().list(parent='services/6F81-5844-456A')
         while req is not None:
             resp = req.execute()
@@ -808,6 +808,7 @@ def getPrice(inst_type, cheap_multiplier):
         _PRICE_CACHE['update'] = time.time() + 60*60
 
     out_price = 0
+    out_currency = 'NON'
 
     for it in _PRICE_CACHE['data']:
         if not all([ check in it.get('description') for check in desc_check ]):
@@ -815,6 +816,7 @@ def getPrice(inst_type, cheap_multiplier):
         exp = it.get('pricingInfo', [{}])[0].get('pricingExpression', {})
         price_def = exp.get('tieredRates', [{}])[0].get('unitPrice', {})
         price = float(price_def.get('unit', '0')) + price_def.get('nanos', 0)/1000000000.0
+        out_currency = price_def.get('currencyCode')
         if ' Core ' in it.get('description'):
             print('DEBUG: Price adding CPU: ' + str(price * inst_info['cpu']))
             out_price += price * inst_info['cpu']
@@ -822,7 +824,7 @@ def getPrice(inst_type, cheap_multiplier):
             print('DEBUG: Price adding MEM: ' + str(price * (inst_info['mem'] / 1024.0)))
             out_price += price * (inst_info['mem'] / 1024.0)
 
-    return out_price
+    return (out_price, out_currency)
 
 findGoogleCloudSdk()
 

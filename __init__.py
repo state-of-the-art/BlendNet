@@ -230,15 +230,18 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
                 row.prop(self, 'blender_dist_url')
                 box.row().prop(self, 'blender_dist_checksum')
             box_box = box.box()
+
             box_box.label(text='Manager')
             row = box_box.row()
             row.prop(self, 'manager_instance_type', text='Type')
             row = box_box.row()
-            if BlendNet.addon.getManagerPrice(self.manager_instance_type) < 0.0:
-                row.label(text='WARNING: Unable to find price for the type "%s"' % (self.manager_instance_type,))
+            price = BlendNet.addon.getManagerPriceBG(self.manager_instance_type, context)
+            if price[0] < 0.0:
+                row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
+                    self.manager_instance_type, price[1]
+                ), icon='ERROR')
             else:
-                row.label(text='Calculated price: ~%f/Hour (USD or region currency)' %
-                    BlendNet.addon.getManagerPrice(self.manager_instance_type))
+                row.label(text='Calculated price: ~%f/Hour (%s)' % price)
             row = box_box.row()
             row.prop(self, 'manager_address')
             row.enabled = False # TODO: remove it when functionality will be available
@@ -248,6 +251,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             row.prop(self, 'manager_user')
             row = box_box.row()
             row.prop(self, 'manager_password')
+
             box_box = box.box()
             box_box.label(text='Agent')
             row = box_box.row()
@@ -261,11 +265,24 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             row.prop(self, 'manager_agent_instance_type', text='Agents type')
             row.prop(self, 'manager_agents_max', text='Agents max')
             row = box_box.row()
-            if BlendNet.addon.getAgentPrice(self.manager_agent_instance_type) < 0.0:
-                row.label(text='WARNING: Unable to find price for the type "%s"' % (self.manager_agent_instance_type,))
+            price = BlendNet.addon.getAgentPriceBG(self.manager_agent_instance_type, context)
+            if price[0] < 0.0:
+                row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
+                    self.manager_agent_instance_type, price[1]
+                ), icon='ERROR')
             else:
-                row.label(text='Calculated combined price: ~%f/Hour (USD or region currency)' %
-                    (BlendNet.addon.getAgentPrice(self.manager_agent_instance_type) * self.manager_agents_max))
+                row.label(text='Calculated combined price: ~%f/Hour (%s)' % (
+                    price[0] * self.manager_agents_max, price[1]
+                ))
+            min_price = BlendNet.addon.getMinimalCheapPriceBG(self.manager_agent_instance_type, context)
+            if min_price > 0.0:
+                row = box_box.row()
+                row.label(text='Minimal combined price: ~%f/Hour' % (
+                    min_price * self.manager_agents_max,
+                ))
+                if price[0] <= min_price:
+                    row = box_box.row()
+                    row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
             row = box_box.row()
             row.prop(self, 'agent_port')
             row = box_box.row()
@@ -982,6 +999,14 @@ class BlendNetManagerPanel(bpy.types.Panel):
         row = layout.row()
         row.enabled = not BlendNet.addon.isManagerCreated()
         row.prop(prefs, 'manager_instance_type', text='Type')
+        price = BlendNet.addon.getManagerPriceBG(prefs.manager_instance_type, context)
+        row = layout.row()
+        if price[0] < 0.0:
+            row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
+                prefs.manager_instance_type, price[1]
+            ), icon='ERROR')
+        else:
+            row.label(text='Calculated price: ~%f/Hour (%s)' % price)
 
         manager_info = BlendNet.addon.getResources(context).get('manager')
         if manager_info:
@@ -1032,6 +1057,26 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         row.prop(prefs, 'manager_agent_instance_type', text='Agents type')
         row = layout.row()
         row.prop(prefs, 'manager_agents_max', text='Agents max')
+        row = layout.row()
+        price = BlendNet.addon.getAgentPriceBG(prefs.manager_agent_instance_type, context)
+        if price[0] < 0.0:
+            row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
+                prefs.manager_agent_instance_type, price[1]
+            ), icon='ERROR')
+        else:
+            row.label(text='Calculated combined price: ~%f/Hour (%s)' % (
+                price[0] * prefs.manager_agents_max, price[1]
+            ))
+
+        min_price = BlendNet.addon.getMinimalCheapPriceBG(prefs.manager_agent_instance_type, context)
+        if min_price > 0.0:
+            row = layout.row()
+            row.label(text='Minimal combined price: ~%f/Hour' % (
+                min_price * prefs.manager_agents_max,
+            ))
+            if price[0] <= min_price:
+                row = layout.row()
+                row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
 
 class BlendNetRenderEngine(bpy.types.RenderEngine):
     '''Continuous render engine to allow switch between tasks'''

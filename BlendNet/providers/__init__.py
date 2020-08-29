@@ -169,4 +169,8 @@ def getCheapMultiplierList():
 
 def getPrice(inst_type, cheap_multiplier):
     '''Return the price of the instance type per hour'''
-    return _execProviderFunc('getPrice', -1.0, inst_type, cheap_multiplier)
+    return _execProviderFunc('getPrice', (-1.0, 'ERR'), inst_type, cheap_multiplier)
+
+def getMinimalCheapPrice(inst_type):
+    '''Finds the lowest available instance price and returns it'''
+    return _execProviderFunc('getMinimalCheapPrice', -1.0, inst_type)

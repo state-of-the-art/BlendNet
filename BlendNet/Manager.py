@@ -41,6 +41,12 @@ class ManagerConfig(TaskExecutorConfig):
             'type': bool,
             'default': True,
         }
+        self._defs['agent_instance_max_price'] = {
+            'description': '''Maximum cheap instance price to pay for the agent''',
+            'type': float,
+            'min': 0.0,
+            'default': None,
+        }
         self._defs['agent_listen_host'] = {
             'description': '''Agent listen host - ip address or name''',
             'type': str,
@@ -125,6 +131,7 @@ class Manager(providers.Manager, TaskExecutorBase):
             'bucket': self._cfg.bucket,
             'instance_type': self._cfg.agent_instance_type,
             'use_cheap_instance': self._cfg.agent_use_cheap_instance,
+            'instance_max_price': self._cfg.agent_instance_max_price,
             'listen_host': self._cfg.agent_listen_host,
             'listen_port': self._cfg.agent_listen_port,
             'auth_user': self._cfg.agent_auth_user,
