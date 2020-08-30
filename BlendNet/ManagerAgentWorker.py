@@ -304,6 +304,12 @@ class ManagerAgentWorker:
         with self._status_lock:
             return self._status.copy()
 
+    def log(self):
+        '''Get log from the agent'''
+        if self._client:
+            return self._client.log()
+        return None
+
     def busy(self):
         '''Returns True if worker have some work to do'''
         with self._work_lock:

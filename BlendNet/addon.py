@@ -521,6 +521,13 @@ def managerTaskRemove(task):
 def managerTaskResultDownload(task, result, file_path):
     return ManagerClient(getManagerIP(), getConfig()).taskResultDownload(task, result, file_path)
 
+def managerGetLog():
+    return ManagerClient(getManagerIP(), getConfig()).log()
+
+def agentGetLog(agent_name):
+    return ManagerClient(getManagerIP(), getConfig()).agentLog(agent_name)
+
+
 available_blender_dists_cache = None
 available_blender_dists_cache_list = []
 

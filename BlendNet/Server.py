@@ -5,16 +5,33 @@
 Description: Basic REST service for BlendNet task servers
 '''
 
-import os, sys
+import os, sys, time
 import json # Used in the tasks configuration
 
 from . import SimpleREST
+
+class CopyStringIO:
+    '''Class to store the logs to get them from client'''
+    def __init__(self, orig_out, copy_out):
+        self._orig_out = orig_out
+        self._copy_out = copy_out
+    def write(self, buf):
+        self._orig_out.write(buf)
+        self._copy_out[time.time()] = buf
+        if len(self._copy_out) > 100000:
+            to_remove_keys = sorted(self._copy_out.keys())[0:10000]
+            for key in to_remove_keys:
+                del self._copy_out[key]
 
 class Processor(SimpleREST.ProcessorBase):
     def __init__(self, engine, prefix = 'api/v1'):
         super().__init__(prefix)
 
         self._e = engine
+        self._log = dict()
+
+        sys.stdout = CopyStringIO(sys.__stdout__, self._log)
+        sys.stderr = CopyStringIO(sys.__stderr__, self._log)
 
     @SimpleREST.get()
     def info(self, req = None):
@@ -58,6 +75,12 @@ class Processor(SimpleREST.ProcessorBase):
             'running': [ t.name() for t in self._e.tasksRunning() ],
             'terminating': self._e.isTerminating(),
         }}
+
+    @SimpleREST.get()
+    def log(self, req = None):
+        '''Return the captured log'''
+
+        return { 'success': True, 'data': self._log }
 
     @SimpleREST.get('task')
     def tasks(self, req):

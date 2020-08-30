@@ -382,16 +382,6 @@ systemctl start blendnet-manager.service
 def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
 
-    # TODO: Add spot instance parameter
-    #     --instance-market-options file://spot-options.json
-    # {
-    #   "MarketType": "spot",
-    #   "SpotOptions": {
-    #     "MaxPrice": "0.02", # Create param for how cheap the instance should be, like 0.33*demand
-    #     "SpotInstanceType": "one-time"
-    #   }
-    # }
-
     try:
         _getInstanceId(cfg['instance_name'])
         # If it pass here - means the instance is already existing
@@ -517,8 +507,23 @@ def startInstance(instance_id):
     _executeAwsTool('ec2', 'wait', 'instance-running',
                     '--instance-ids', instance_id)
 
+def _isInstanceSpot(instance_id):
+    '''Gets the instance is in spot lifecycle'''
+    data = _executeAwsTool('ec2', 'describe-instances',
+                           '--instance-ids', instance_id,
+                           '--query', 'Reservations[].Instances[].InstanceLifecycle')
+    if len(data) != 1:
+        raise AwsToolException('Error in request of instance lifecycle for "%s": %s' % (instance_id, data))
+
+    return data[0] == 'spot'
+
 def stopInstance(instance_id):
     '''Stop instance with specified name'''
+
+    # Check spot instance, it can't be stopped - only deleted
+    if _isInstanceSpot(instance_id):
+        deleteInstance(instance_id)
+        return
 
     _executeAwsTool('ec2', 'stop-instances',
                     '--instance-ids', instance_id)

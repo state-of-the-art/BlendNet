@@ -22,6 +22,10 @@ class ManagerClient(Client):
             ManagerClient._engine._address = address
             ManagerClient._engine._cfg = cfg
 
+    def agentLog(self, agent_name):
+        '''Get the log information for the agent'''
+        return self._engine.get('logs/' + agent_name)
+
     def calculateChecksum(self, stream):
         '''Will calculate and redurn checksum and reset stream'''
         import hashlib

@@ -22,6 +22,10 @@ class Client:
         '''Get information about the current status'''
         return self._engine.get('status')
 
+    def log(self):
+        '''Get the log information'''
+        return self._engine.get('log')
+
     def tasks(self):
         '''Get the tasks information'''
         return self._engine.get('task')

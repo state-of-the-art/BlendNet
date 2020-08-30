@@ -20,6 +20,19 @@ class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
         super().__init__(Manager(conf), prefix)
 
+    @SimpleREST.get('logs/*')
+    def agent_log(self, req, parts):
+        '''Returns the information about the task'''
+        agent = self._e.agentGet(parts[0])
+        if not agent:
+            return { 'success': False, 'message': 'Unable to find agent' }
+
+        data = agent.log()
+        if not data:
+            return { 'success': False, 'message': 'No data received from the agent' }
+
+        return { 'success': True, 'message': 'Got agent log', 'data': data }
+
 
 # TODO: allow even basic config change - restart the http server if its configs changed
 conf = {}

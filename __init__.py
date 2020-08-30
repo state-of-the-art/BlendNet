@@ -25,6 +25,7 @@ else:
 
 import os
 import time
+import tempfile
 from datetime import datetime
 
 import bpy
@@ -241,7 +242,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
                     self.manager_instance_type, price[1]
                 ), icon='ERROR')
             else:
-                row.label(text='Calculated price: ~%f/Hour (%s)' % price)
+                row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 12), price[1]))
             row = box_box.row()
             row.prop(self, 'manager_address')
             row.enabled = False # TODO: remove it when functionality will be available
@@ -271,14 +272,14 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
                     self.manager_agent_instance_type, price[1]
                 ), icon='ERROR')
             else:
-                row.label(text='Calculated combined price: ~%f/Hour (%s)' % (
-                    price[0] * self.manager_agents_max, price[1]
+                row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
+                    round(price[0] * self.manager_agents_max, 12), price[1]
                 ))
             min_price = BlendNet.addon.getMinimalCheapPriceBG(self.manager_agent_instance_type, context)
             if min_price > 0.0:
                 row = box_box.row()
-                row.label(text='Minimal combined price: ~%f/Hour' % (
-                    min_price * self.manager_agents_max,
+                row.label(text='Minimal combined price: ~%s/Hour' % (
+                    round(min_price * self.manager_agents_max, 12),
                 ))
                 if price[0] <= min_price:
                     row = box_box.row()
@@ -665,6 +666,74 @@ class TASKS_UL_list(bpy.types.UIList):
         elif self.layout_type in {'GRID'}:
             pass
 
+class BlendNetGetLogOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.getlog'
+    bl_label = 'Get Log'
+    bl_description = 'Show the Manager or Agent log data'
+
+    agent_name: StringProperty(
+        name = 'Name of Agent',
+        description = 'Name of Agent to get log from or Manager will be used',
+        default = ''
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        data = {}
+        if self.agent_name:
+            data = BlendNet.addon.agentGetLog(self.agent_name)
+        else:
+            data = BlendNet.addon.managerGetLog()
+
+        prefix = self.agent_name if self.agent_name else BlendNet.addon.getResources(context).get('manager', {}).get('name')
+
+        if not data:
+            self.report({'ERROR'}, 'No log data retreived for ' + prefix)
+            return {'CANCELLED'}
+
+        def drawPopup(self, context):
+            layout = self.layout
+
+            log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8',
+                    prefix=prefix + '_' + datetime.now().strftime('%y%m%d-%H%M%S_'),
+                    suffix='.log')
+            line = ''
+            for t, l in data.items():
+                if not l.endswith('\n'):
+                    line += l
+                    continue
+                time_str = datetime.fromtimestamp(round(float(t), 3)).strftime('%y.%m.%d %H:%M:%S.%f')
+                log_file.write(time_str + '\t' + line + l)
+                line = ''
+            if line:
+                log_file.write('{not completed line}\t' + line)
+
+            log_file.flush()
+
+            bpy.ops.text.open(filepath=log_file.name, internal=True)
+
+            # Opening new window to show the log
+            bpy.ops.screen.userpref_show("INVOKE_DEFAULT")
+            area = bpy.context.window_manager.windows[-1].screen.areas[0]
+            if area.type == 'PREFERENCES':
+                area.type = 'TEXT_EDITOR'
+                area.spaces[0].show_line_numbers = False
+                area.spaces[0].show_syntax_highlight = False
+                area.spaces[0].text = bpy.data.texts[os.path.basename(log_file.name)]
+                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+            else:
+                layout.label(text='Ok, open Blender text editor and find "%s".' % (os.path.basename(log_file.name),))
+                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+
+        wm.popup_menu(drawPopup, title='Log for manager', icon='INFO')
+
+        return {'FINISHED'}
+
 class BlendNetTaskInfoOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskinfo'
     bl_label = 'Task info'
@@ -1006,7 +1075,10 @@ class BlendNetManagerPanel(bpy.types.Panel):
                 prefs.manager_instance_type, price[1]
             ), icon='ERROR')
         else:
-            row.label(text='Calculated price: ~%f/Hour (%s)' % price)
+            row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 8), price[1]))
+        row = layout.row()
+        row.operator('blendnet.getlog', text='Get Manager Log', icon='TEXT').agent_name = ''
+        row.enabled = BlendNet.addon.isManagerActive()
 
         manager_info = BlendNet.addon.getResources(context).get('manager')
         if manager_info:
@@ -1052,11 +1124,12 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         layout.use_property_decorate = False # No prop animation
         prefs = bpy.context.preferences.addons[__package__].preferences
 
-        layout.enabled = not BlendNet.addon.isManagerStarted()
         row = layout.row()
         row.prop(prefs, 'manager_agent_instance_type', text='Agents type')
+        row.enabled = not BlendNet.addon.isManagerStarted()
         row = layout.row()
         row.prop(prefs, 'manager_agents_max', text='Agents max')
+        row.enabled = not BlendNet.addon.isManagerStarted()
         row = layout.row()
         price = BlendNet.addon.getAgentPriceBG(prefs.manager_agent_instance_type, context)
         if price[0] < 0.0:
@@ -1064,22 +1137,31 @@ class BlendNetAgentsPanel(bpy.types.Panel):
                 prefs.manager_agent_instance_type, price[1]
             ), icon='ERROR')
         else:
-            row.label(text='Calculated combined price: ~%f/Hour (%s)' % (
-                price[0] * prefs.manager_agents_max, price[1]
+            row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
+                round(price[0] * prefs.manager_agents_max, 8), price[1]
             ))
 
         min_price = BlendNet.addon.getMinimalCheapPriceBG(prefs.manager_agent_instance_type, context)
         if min_price > 0.0:
             row = layout.row()
-            row.label(text='Minimal combined price: ~%f/Hour' % (
-                min_price * prefs.manager_agents_max,
+            row.label(text='Minimal combined price: ~%s/Hour' % (
+                round(min_price * prefs.manager_agents_max, 8),
             ))
             if price[0] <= min_price:
                 row = layout.row()
                 row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
 
+        agents = BlendNet.addon.getResources(context).get('agents', {})
+        if agents:
+            box = layout.box()
+            for inst_id, info in agents.items():
+                split = box.split(factor=0.8)
+                split.label(text=info.get('name'))
+                split.operator('blendnet.getlog', text='Log', icon='TEXT').agent_name = info.get('name')
+                split.enabled = BlendNet.addon.isManagerActive()
+
 class BlendNetRenderEngine(bpy.types.RenderEngine):
-    '''Continuous render engine to allow switch between tasks'''
+    '''Continuous render engine allows to switch between the tasks'''
     bl_idname = __package__
     bl_label = "BlendNet (don't use as a primary engine)"
     bl_use_postprocess = True
@@ -1240,6 +1322,7 @@ def register():
     bpy.utils.register_class(BlendNetTaskRemoveOperation)
     bpy.utils.register_class(BlendNetTasksRemoveEndedOperation)
     bpy.utils.register_class(BlendNetTaskMenu)
+    bpy.utils.register_class(BlendNetGetLogOperation)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
     bpy.utils.register_class(BlendNetDestroyManager)
@@ -1252,6 +1335,7 @@ def unregister():
     bpy.utils.unregister_class(BlendNetToggleManager)
     bpy.utils.unregister_class(BlendNetDestroyManager)
     bpy.utils.unregister_class(BlendNetRenderPanel)
+    bpy.utils.unregister_class(BlendNetGetLogOperation)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)
     bpy.utils.unregister_class(BlendNetTasksRemoveEndedOperation)
