@@ -146,10 +146,13 @@ class Manager(providers.Manager, TaskExecutorBase):
             elif len(self._agents_pool) > self._cfg.agents_max:
                 pass # TODO: it should not remove the active agents, but just mark them to remove later
 
-    def _agentsGet(self):
-        '''Get the list of agents'''
+    def agentGet(self, agent_name):
+        '''Get agent worker object'''
         with self._agents_pool_lock:
-            return self._agents_pool.copy()
+            for agent in self._agents_pool:
+                if agent_name == agent._name:
+                    return agent
+        return None
 
     def resourcesGet(self, quick_check = False):
         '''Run the delayed check and return the cached value'''
