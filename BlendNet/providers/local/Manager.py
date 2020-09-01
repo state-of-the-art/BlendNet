@@ -30,11 +30,30 @@ class Manager(InstanceProvider):
             'auth_password': conf.get('auth_password', self._cfg.agent_auth_password),
             'upload_workers': conf.get('upload_workers', self._cfg.agent_upload_workers),
         }
-        worker = ManagerAgentWorker(self, agent_name, cfg)
         with self._agents_pool_lock:
             self._cfg.agents_max += 1
-            self._agents_pool.append(worker)
-        return worker
+            self._agents_pool.append(ManagerAgentWorker(self, agent_name, cfg))
+        return True
+
+    def agentCustomRemove(self, agent_name):
+        '''Remove the existing custom agent worker'''
+        with self._agents_pool_lock:
+            worker_id = -1
+            for i, worker in enumerate(self._agents_pool):
+                if worker.name() != agent_name:
+                    continue
+                if worker.busy():
+                    return False
+                worker_id = i
+
+            if worker_id >= 0:
+                self._cfg.agents_max -= 1
+                self._agents_pool[worker_id].stop()
+                del self._agents_pool[worker_id]
+                del CUSTOM_AGENTS[agent_name]
+                return True
+
+        return False
 
     def agentCustomList(self):
         '''Returns the list of custom agents and their info'''

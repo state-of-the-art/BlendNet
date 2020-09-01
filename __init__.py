@@ -968,6 +968,110 @@ class BlendNetTaskRemoveOperation(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BlendNetAgentRemoveOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.agentremove'
+    bl_label = 'Remove the agent'
+    bl_description = 'Remove the agent from the agents pool'
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    agent_name: StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        self.report({'INFO'}, 'Removing agent "%s"' % self.agent_name)
+        if not BlendNet.addon.managerAgentRemove(self.agent_name):
+            self.report({'WARNING'}, 'Unable to remove agent "%s"' % (self.agent_name,))
+            return {'PASS_THROUGH'}
+
+        self.report({'INFO'}, 'Removed agent "%s"' % (self.agent_name,))
+
+        return {'FINISHED'}
+
+class BlendNetAgentCreateOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.agentcreate'
+    bl_label = 'Agent create'
+    bl_description = 'Register new agent in the manager'
+
+    agent_name: StringProperty(
+        name = 'Name',
+        description = 'Name of Agent to create',
+        default = ''
+    )
+
+    agent_address: StringProperty(
+        name = 'Address',
+        description = 'IP or domain name of the agent',
+        default = ''
+    )
+
+    agent_port: IntProperty(
+        name = 'Port',
+        description = 'TLS tcp port to communicate Manager with Agent service',
+        min = 1,
+        max = 65535,
+        default = 9443,
+    )
+
+    agent_user: StringProperty(
+        name = 'User',
+        description = 'HTTP Basic Auth username',
+        maxlen = 32,
+        default = '',
+    )
+
+    agent_password: StringProperty(
+        name = 'Password',
+        description = 'HTTP Basic Auth password',
+        subtype = 'PASSWORD',
+        maxlen = 128,
+        default = '',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        self.agent_port = prefs.agent_port
+        self.agent_user = prefs.agent_user
+        self.agent_password = prefs.agent_password_hidden
+
+        return wm.invoke_props_dialog(self)
+
+    def execute(self, context):
+        if not self.agent_name:
+            self.report({'ERROR'}, 'No agent name is specified')
+            return {'PASS_THROUGH'}
+        if not self.agent_address:
+            self.report({'ERROR'}, 'No agent address is specified')
+            return {'PASS_THROUGH'}
+
+        cfg = {
+            'address': self.agent_address,
+            'port': self.agent_port,
+            'auth_user': self.agent_user,
+            'auth_password': self.agent_password,
+        }
+        if not BlendNet.addon.managerAgentCreate(self.agent_name, cfg):
+            self.report({'WARNING'}, 'Unable to create agent "%s"' % (self.agent_name,))
+            return {'PASS_THROUGH'}
+
+        self.report({'INFO'}, 'Created agent "%s" (%s:%s)' % (
+            self.agent_name, self.agent_address, self.agent_port
+        ))
+
+        return {'FINISHED'}
+
 class BlendNetTasksRemoveEndedOperation(bpy.types.Operator):
     bl_idname = 'blendnet.tasksremoveended'
     bl_label = 'Remove all ended tasks'
@@ -1155,6 +1259,9 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         layout = self.layout
 
         layout.label(text='Agents (%d)' % BlendNet.addon.getStartedAgentsNumber(context))
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if prefs.resource_provider == 'local':
+            layout.operator('blendnet.agentcreate', icon='ADD', text='')
 
     def draw(self, context):
         layout = self.layout
@@ -1198,6 +1305,8 @@ class BlendNetAgentsPanel(bpy.types.Panel):
                 split.label(text=info.get('name'))
                 split.operator('blendnet.getlog', text='Log', icon='TEXT').agent_name = info.get('name')
                 split.enabled = BlendNet.addon.isManagerActive()
+                if prefs.resource_provider == 'local':
+                    split.operator('blendnet.agentremove', icon='TRASH', text='').agent_name = info.get('name')
 
 class BlendNetRenderEngine(bpy.types.RenderEngine):
     '''Continuous render engine allows to switch between the tasks'''
@@ -1360,6 +1469,8 @@ def register():
     bpy.utils.register_class(BlendNetTasksStopStartedOperation)
     bpy.utils.register_class(BlendNetTaskRemoveOperation)
     bpy.utils.register_class(BlendNetTasksRemoveEndedOperation)
+    bpy.utils.register_class(BlendNetAgentRemoveOperation)
+    bpy.utils.register_class(BlendNetAgentCreateOperation)
     bpy.utils.register_class(BlendNetTaskMenu)
     bpy.utils.register_class(BlendNetGetLogOperation)
     bpy.utils.register_class(BlendNetRenderPanel)
@@ -1377,6 +1488,8 @@ def unregister():
     bpy.utils.unregister_class(BlendNetGetLogOperation)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)
+    bpy.utils.unregister_class(BlendNetAgentCreateOperation)
+    bpy.utils.unregister_class(BlendNetAgentRemoveOperation)
     bpy.utils.unregister_class(BlendNetTasksRemoveEndedOperation)
     bpy.utils.unregister_class(BlendNetTaskRemoveOperation)
     bpy.utils.unregister_class(BlendNetTasksStopStartedOperation)

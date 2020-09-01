@@ -11,6 +11,8 @@ import ssl
 import json # Used to parse response
 import urllib # To request API
 import hashlib
+from io import StringIO
+
 from . import providers
 
 class Client:
@@ -37,8 +39,6 @@ class Client:
 
     def taskConfigPut(self, task, config_data):
         '''Send task configuration'''
-        from io import StringIO
-
         path = 'task/%s/config' % task
         data = json.dumps(config_data)
         size = len(data)

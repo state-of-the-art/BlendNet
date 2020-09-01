@@ -6,6 +6,8 @@ Description: Manager REST client
 '''
 
 import os
+import json
+from io import StringIO
 
 from .Client import (
     Client,
@@ -25,6 +27,18 @@ class ManagerClient(Client):
     def agents(self):
         '''Get the list of agents with info'''
         return self._engine.get('agent')
+
+    def agentCreate(self, agent_name, conf):
+        '''Create the new agent'''
+        path = 'agent/%s/config' % (agent_name,)
+        data = json.dumps(conf)
+        stream = StringIO(data)
+
+        return self._engine.put(path, stream, len(data))
+
+    def agentRemove(self, agent_name):
+        '''Remove the agent from the manager'''
+        return self._engine.delete('agent/' + agent_name)
 
     def agentLog(self, agent_name):
         '''Get the log information for the agent'''

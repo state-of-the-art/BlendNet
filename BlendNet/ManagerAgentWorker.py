@@ -22,7 +22,7 @@ class ManagerAgentState(Enum):
     STARTED = 3
     ACTIVE = 4
 
-class ManagerAgentWorker:
+class ManagerAgentWorker(object):
     def __init__(self, manager, name, cfg):
         print('DEBUG: Creating agent worker %s' % name)
         self._parent = manager
@@ -63,6 +63,10 @@ class ManagerAgentWorker:
 
     def __del__(self):
         print('DEBUG: Deleting agent worker %s' % self._name)
+        self.stop()
+
+    def stop(self):
+        print('DEBUG: Stopping agent worker %s' % self._name)
         self._enabled = False
 
     def _downloadWatcher(self):
@@ -172,6 +176,9 @@ class ManagerAgentWorker:
         with self._state_lock:
             self._state_prev = self._state
             self._state = state
+
+    def name(self):
+        return self._name
 
     def state(self):
         with self._state_lock:

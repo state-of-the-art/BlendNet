@@ -525,6 +525,12 @@ def managerTaskRemove(task):
 def managerTaskResultDownload(task, result, file_path):
     return ManagerClient(getManagerIP(), getConfig()).taskResultDownload(task, result, file_path)
 
+def managerAgentCreate(agent_name, conf):
+    return ManagerClient(getManagerIP(), getConfig()).agentCreate(agent_name, conf)
+
+def managerAgentRemove(agent_name):
+    return ManagerClient(getManagerIP(), getConfig()).agentRemove(agent_name)
+
 def managerGetLog():
     return ManagerClient(getManagerIP(), getConfig()).log()
 
@@ -668,6 +674,8 @@ def checkAgentMemIsEnough():
     '''Making sure the current agent type have enough memory to render the scene'''
     bn = bpy.context.scene.blendnet
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    if prefs.resource_provider == 'local':
+        return True # TODO: no good way to get it done for now
     return available_instance_types_mem_cache[0].get(prefs.manager_agent_instance_type, 0) >= bn.scene_memory_req
 
 
