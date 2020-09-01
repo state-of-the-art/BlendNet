@@ -27,9 +27,9 @@ class ManagerConfig(TaskExecutorConfig):
         self._defs['agents_max'] = {
             'description': '''Manager agent pool maximum''',
             'type': int,
-            'min': 1,
+            'min': 0,
             'max': 1000,
-            'default': 3,
+            'default': 0,
         }
         self._defs['agent_instance_type'] = {
             'description': '''Agent instance type (size)''',
@@ -62,12 +62,12 @@ class ManagerConfig(TaskExecutorConfig):
         self._defs['agent_auth_user'] = {
             'description': '''Agent auth user name''',
             'type': str,
-            'default': '',
+            'default': 'None',
         }
         self._defs['agent_auth_password'] = {
             'description': '''Agent auth password''',
             'type': str,
-            'default': '',
+            'default': 'None',
         }
         self._defs['agent_instance_prefix'] = {
             'description': '''Agent instance prefix''',
@@ -160,11 +160,9 @@ class Manager(providers.Manager, TaskExecutorBase):
             if quick_check and self._check_resources_timer:
                 self._check_resources_timer.cancel()
                 self._check_resources_timer = None
-            if self._check_resources_timer:
-                with self._resources_lock:
-                    return self._resources
-            self._check_resources_timer = threading.Timer(0.1 if quick_check else 3, self.resourcesGetWait)
-            self._check_resources_timer.start()
+            if not self._check_resources_timer:
+                self._check_resources_timer = threading.Timer(0.1 if quick_check else 3, self.resourcesGetWait)
+                self._check_resources_timer.start()
 
         with self._resources_lock:
             return self._resources
@@ -180,4 +178,4 @@ class Manager(providers.Manager, TaskExecutorBase):
         with self._resources_lock:
             self._resources = res
 
-        return res
+        return self._resources

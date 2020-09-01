@@ -95,7 +95,7 @@ class ClientEngine:
             return True
 
         print('DEBUG: Trying to get CA certificate from the bucket')
-        self._ca = providers.downloadDataFromBucket(self._cfg['bucket'], 'ca.crt')
+        self._ca = providers.downloadDataFromBucket(self._cfg.get('bucket', ''), 'ca.crt')
         if not self._ca:
             return False
 
@@ -107,10 +107,10 @@ class ClientEngine:
         if not self._getCA() or not self._address:
             return None
 
-        url = 'https://%s:%d/api/v1/%s' % (self._address, self._cfg['listen_port'], path)
+        url = 'https://%s:%d/api/v1/%s' % (self._address, self._cfg.get('listen_port'), path)
         req = urllib.request.Request(url, data=data, method=method)
 
-        creds = '%s:%s' % (self._cfg['auth_user'], self._cfg['auth_password'])
+        creds = '%s:%s' % (self._cfg.get('auth_user'), self._cfg.get('auth_password'))
         if creds != ':':
             from base64 import b64encode
             req.add_header('Authorization', 'Basic %s' % b64encode(bytes(creds, 'utf-8')).decode('ascii'))

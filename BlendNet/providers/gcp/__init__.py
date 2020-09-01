@@ -1,7 +1,16 @@
 '''Google Cloud Platform
 Provide API access to allocate required resources in GCP
 Dependencies: google cloud sdk installed and configured auth
+Help: https://github.com/state-of-the-art/BlendNet/wiki/HOWTO:-Setup-provider:-Google-Cloud-Platform-(GCP)
 '''
+
+__all__ = [
+    'Processor',
+    'Manager',
+    'Agent',
+    'Instance',
+]
+
 import sys
 import os.path
 import time
@@ -9,12 +18,6 @@ import pathlib
 import platform
 import urllib.request
 import subprocess
-
-__all__ = [
-    'Manager',
-    'Agent',
-    'Instance',
-]
 
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 METADATA_HEADER = ('Metadata-Flavor', 'Google')
@@ -831,6 +834,7 @@ findGoogleCloudSdk()
 if GOOGLE_CLOUD_SDK_ROOT:
     loadGoogleCloudSdk()
 
+from .Processor import Processor
 from .Manager import Manager
 from .Agent import Agent
 from .Instance import Instance

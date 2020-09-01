@@ -22,9 +22,13 @@ class ManagerClient(Client):
             ManagerClient._engine._address = address
             ManagerClient._engine._cfg = cfg
 
+    def agents(self):
+        '''Get the list of agents with info'''
+        return self._engine.get('agent')
+
     def agentLog(self, agent_name):
         '''Get the log information for the agent'''
-        return self._engine.get('logs/' + agent_name)
+        return self._engine.get('agent/%s/log' % (agent_name,))
 
     def calculateChecksum(self, stream):
         '''Will calculate and redurn checksum and reset stream'''

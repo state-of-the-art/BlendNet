@@ -31,7 +31,8 @@ class ManagerAgentWorker:
         self._cfg = cfg.copy()
 
         # Generate agent certificates
-        SimpleREST.generateCert(self._name, self._name)
+        if 'bucket' in self._cfg:
+            SimpleREST.generateCert(self._name, self._name)
 
         self._enabled = True
 
@@ -185,8 +186,8 @@ class ManagerAgentWorker:
         agent = self._parent.resourcesGet().get('agents', {}).get(self._id, {})
         while self._enabled:
             # Destroy agent if it's type is wrong
-            if agent and agent.get('type') != self._cfg['instance_type']:
-                print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (self._name, agent.get('type'), self._cfg['instance_type']))
+            if agent and agent.get('type') != self._cfg.get('instance_type', 'custom'):
+                print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (self._name, agent.get('type'), self._cfg.get('instance_type')))
                 providers.deleteInstance(self._id)
                 self._id = None
 
@@ -230,9 +231,9 @@ class ManagerAgentWorker:
         '''Create and start the agent if it's needed'''
         if self.state() in (ManagerAgentState.STOPPED, ManagerAgentState.DESTROYED):
             # Agent will need config files right after the start
-            providers.uploadFileToBucket('%s.key' % self._name, self._cfg['bucket'], 'work_%s/server.key' % self._name)
-            providers.uploadFileToBucket('%s.crt' % self._name, self._cfg['bucket'], 'work_%s/server.crt' % self._name)
-            providers.uploadDataToBucket(json.dumps(self._cfg).encode('utf-8'), self._cfg['bucket'], 'work_%s/agent.json' % self._name)
+            providers.uploadFileToBucket('%s.key' % self._name, self._cfg.get('bucket'), 'work_%s/server.key' % self._name)
+            providers.uploadFileToBucket('%s.crt' % self._name, self._cfg.get('bucket'), 'work_%s/server.crt' % self._name)
+            providers.uploadDataToBucket(json.dumps(self._cfg).encode('utf-8'), self._cfg.get('bucket'), 'work_%s/agent.json' % self._name)
 
         if self.state() == ManagerAgentState.STOPPED:
             print('DEBUG: Starting the existing agent instance "%s"' % self._name)

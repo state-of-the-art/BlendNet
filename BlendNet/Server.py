@@ -8,6 +8,7 @@ Description: Basic REST service for BlendNet task servers
 import os, sys, time
 import json # Used in the tasks configuration
 
+from . import providers
 from . import SimpleREST
 
 class CopyStringIO:
@@ -22,10 +23,14 @@ class CopyStringIO:
             to_remove_keys = sorted(self._copy_out.keys())[0:10000]
             for key in to_remove_keys:
                 del self._copy_out[key]
+    def flush(self):
+        self._orig_out.flush()
 
-class Processor(SimpleREST.ProcessorBase):
+class Processor(providers.Processor, SimpleREST.ProcessorBase):
     def __init__(self, engine, prefix = 'api/v1'):
-        super().__init__(prefix)
+        print('DEBUG: Creating Processor')
+        providers.Processor.__init__(self)
+        SimpleREST.ProcessorBase.__init__(self, prefix)
 
         self._e = engine
         self._log = dict()

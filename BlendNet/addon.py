@@ -47,8 +47,9 @@ def getProvider():
 
 def hidePassword(obj, prop):
     '''Will set the hidden value and replace the property with stars'''
-    setattr(obj, prop+'_hidden', getattr(obj, prop))
-    setattr(obj, prop, '**********')
+    if getattr(obj, prop) != '**********':
+        setattr(obj, prop+'_hidden', getattr(obj, prop))
+        setattr(obj, prop, '**********')
 
 def passAlphanumString(val):
     '''Generates random string from letters and digits'''
@@ -81,23 +82,25 @@ def genSID(obj, prop, num = 6):
 def getConfig():
     '''Function to update config when params is changed'''
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
-    bn = bpy.context.scene.blendnet
 
     cfg = {} # TODO: Move to ManagerConfig
     cfg['session_id'] = prefs.session_id
     cfg['dist_url'] = prefs.blender_dist_url
     cfg['dist_checksum'] = prefs.blender_dist_checksum
-    cfg['bucket'] = providers.getBucketName(cfg['session_id'])
+    if prefs.resource_provider != 'local':
+        cfg['bucket'] = providers.getBucketName(cfg['session_id'])
 
     cfg['listen_port'] = prefs.manager_port
     cfg['auth_user'] = prefs.manager_user
     cfg['auth_password'] = prefs.manager_password_hidden
     cfg['instance_name'] = providers.getManagerName(cfg['session_id'])
-    cfg['instance_type'] = prefs.manager_instance_type
+    if prefs.resource_provider != 'local':
+        cfg['instance_type'] = prefs.manager_instance_type
 
     cfg['agents_max'] = prefs.manager_agents_max
-    cfg['agent_instance_type'] = prefs.manager_agent_instance_type
-    cfg['agent_use_cheap_instance'] = prefs.agent_use_cheap_instance
+    if prefs.resource_provider != 'local':
+        cfg['agent_instance_type'] = prefs.manager_agent_instance_type
+        cfg['agent_use_cheap_instance'] = prefs.agent_use_cheap_instance
     cfg['agent_listen_port'] = prefs.agent_port
     cfg['agent_auth_user'] = prefs.agent_user
     cfg['agent_auth_password'] = prefs.agent_password_hidden
@@ -215,6 +218,7 @@ def getResources(context = None):
     def worker(provider, area):
         global resources_list_cache
         result = providers.getResources(getConfig()['session_id'])
+
         if resources_list_cache[1] == provider:
             resources_list_cache[0] = result
         if area:

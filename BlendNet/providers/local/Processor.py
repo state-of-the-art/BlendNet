@@ -1,0 +1,45 @@
+#!/usr/bin/python3
+# -*- coding: UTF-8 -*-
+'''Local Processor
+
+Description: Implementation of the Local processor
+'''
+
+import json
+
+from ... import SimpleREST
+
+class Processor:
+    @SimpleREST.put('agent/*/config')
+    def agent_set_config(self, req, parts):
+        '''Set the custom agent configuration as json (max 512KB)'''
+        length = req.headers['content-length']
+        if not length:
+            return { 'success': False, 'message': 'Unable to find "Content-Length" header' }
+
+        if int(length) > 512*1024: # Max 512KB
+            return { 'success': False, 'message': 'Unable read too big agent configuration (> 512KB)' }
+
+        conf = None
+        try:
+            conf = json.loads(req.rfile.read(int(length)))
+        except Exception as e:
+            return { 'success': False, 'message': 'Error during parsing the json data: %s' % e }
+
+        if self._e.agentGet(parts[0]):
+            return { 'success': False, 'message': 'Unable to modify existing agent configs' }
+
+        if not self._e.agentCustomCreate(parts[0], conf):
+            return { 'success': False, 'message': 'Error during agent configuration' }
+
+        return { 'success': True, 'message': 'Agent configured' }
+
+    @SimpleREST.get('agent')
+    def agents_list(self, req = None):
+        '''List the available custom agents'''
+
+        return {
+            'success': True,
+            'message': 'Agent configured',
+            'data': self._e.agentCustomList(),
+        }

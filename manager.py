@@ -3,6 +3,7 @@
 '''BlendNet Manager REST
 
 Description: REST interface for Manager
+Run: /srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 '''
 
 import os, sys
@@ -20,7 +21,7 @@ class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
         super().__init__(Manager(conf), prefix)
 
-    @SimpleREST.get('logs/*')
+    @SimpleREST.get('agent/*/log')
     def agent_log(self, req, parts):
         '''Returns the information about the task'''
         agent = self._e.agentGet(parts[0])

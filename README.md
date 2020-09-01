@@ -175,11 +175,11 @@ confirm the identity of the Agents.
 
 ## Pipeline
 
-Blender `Addon` gets the required credentials to run instances on providers (`GCP` and
-`local` is planned, later the other providers could be added). User also configures
-some settings for the providers - what kind of instances he would like to use, timeouts
-and cost limits. Also, it checks for the proper setup of the project - make sure quotas
-and permissions are setup correctly.
+Blender `Addon` gets the required credentials to run instances on providers (`GCP`,
+`AWS`, ...) or uses the `local` one. User also configures some settings for the
+providers - what kind of instances he would like to use, timeouts and cost limits.
+Also, it checks for the proper setup of the project - make sure quotas and permissions
+are setup correctly.
 
 When a user chooses to start a task - addon saving a temporary blend file and creating
 the `Manager` (locally or on the provider instance - depends on user choice). It's

@@ -20,6 +20,7 @@ with os.scandir(os.path.dirname(__file__)) as it:
             modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
 
 __all__ = [
+    'Processor',
     'Manager',
     'Agent',
 ]
@@ -35,15 +36,16 @@ def selectProvider(provider):
 
 for name, module in modules.items():
     if name != 'local' and not isinstance(module, str) and module.checkLocation():
-        print('INFO: Importing manager/agent from "%s" provider' % name)
-        global Manager, Agent
+        print('INFO: Importing base from "%s" provider' % name)
+        global Processor, Manager, Agent
+        Processor = importlib.import_module('.Processor', '%s.%s' % (__package__, name)).Processor
         Manager = importlib.import_module('.Manager', '%s.%s' % (__package__, name)).Manager
         Agent = importlib.import_module('.Agent', '%s.%s' % (__package__, name)).Agent
         selectProvider(name)
         break
 else:
-    print('INFO: Importing manager/agent from "local" provider')
-    from .local import Manager, Agent
+    print('INFO: Importing base from "local" provider')
+    from .local import Processor, Manager, Agent
 
 
 def getProvidersDoc():
@@ -92,7 +94,7 @@ def uploadDataToBucket(data, bucket, dest_path):
 
 def getResources(session_id):
     '''Returns map of allocated resources - manager and agents'''
-    return _execProviderFunc('getResources', {}, session_id)
+    return _execProviderFunc('getResources', {'agents':{}}, session_id)
 
 def getBucketName(session_id):
     return _execProviderFunc('getBucketName', None, session_id)
