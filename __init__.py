@@ -41,11 +41,11 @@ from bpy.props import (
 class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
-    cloud_provider: EnumProperty(
-        name = 'Cloud Provider',
-        description = 'Cloud provider to allocate resources for rendering',
+    resource_provider: EnumProperty(
+        name = 'Provider',
+        description = 'Engine to provide resources for rendering',
         items = BlendNet.addon.getProvidersEnumItems(),
-        update = lambda self, context: BlendNet.addon.selectProvider(self.cloud_provider),
+        update = lambda self, context: BlendNet.addon.selectProvider(self.resource_provider),
     )
 
     # Advanced
@@ -94,6 +94,13 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         items = BlendNet.addon.fillAvailableInstanceTypesManager,
     )
 
+    manager_ca_path: StringProperty(
+        name = 'CA certificate',
+        description = 'Certificate Authority certificate pem file location',
+        subtype = 'FILE_PATH',
+        default = '',
+    )
+
     manager_address: StringProperty(
         name = 'Address',
         description = 'If you using the existing Manager service put address here '
@@ -119,6 +126,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     manager_password: StringProperty(
         name = 'Password',
         description = 'HTTP Basic Auth password (will be generated if empty)',
+        subtype = 'PASSWORD',
         maxlen = 128,
         default = '',
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'manager_password'),
@@ -170,6 +178,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     agent_password: StringProperty(
         name = 'Password',
         description = 'HTTP Basic Auth password (will be generated if empty)',
+        subtype = 'PASSWORD',
         maxlen = 128,
         default = '',
         update = lambda self, context: BlendNet.addon.hidePassword(self, 'agent_password'),
@@ -183,37 +192,45 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     )
 
     manager_password_hidden: StringProperty(
+        subtype = 'PASSWORD',
         update = lambda self, context: BlendNet.addon.genPassword(self, 'manager_password_hidden'),
     )
 
     agent_password_hidden: StringProperty(
+        subtype = 'PASSWORD',
         update = lambda self, context: BlendNet.addon.genPassword(self, 'agent_password_hidden'),
     )
 
     def draw(self, context):
         layout = self.layout
 
-        # Cloud provider
+        # Provider
         box = layout.box()
-        box.prop(self, 'cloud_provider')
-        if not BlendNet.addon.checkProviderIsGood(self.cloud_provider):
-            err = BlendNet.addon.getProviderDocs(self.cloud_provider).split('\n')
+        split = box.split(factor=0.8)
+        split.prop(self, 'resource_provider')
+        info = BlendNet.addon.getProviderDocs(self.resource_provider).split('\n')
+        for line in info:
+            if line.startswith('Help: '):
+                split.operator('wm.url_open', text='How to setup', icon='HELP').url = line.split(': ', 1)[-1]
+        if not BlendNet.addon.checkProviderIsGood(self.resource_provider):
+            err = BlendNet.addon.getProviderDocs(self.resource_provider).split('\n')
             for line in err:
                 box.label(text=line.strip(), icon='ERROR')
-        box = box.box()
-        box.label(text='Collected cloud info:')
+        if self.resource_provider != 'local':
+            box = box.box()
+            box.label(text='Collected cloud info:')
 
-        provider_info = BlendNet.addon.getProviderInfo(context)
-        if 'ERRORS' in provider_info:
-            for err in provider_info['ERRORS']:
-                box.label(text=err, icon='ERROR')
+            provider_info = BlendNet.addon.getProviderInfo(context)
+            if 'ERRORS' in provider_info:
+                for err in provider_info['ERRORS']:
+                    box.label(text=err, icon='ERROR')
 
-        for key, value in provider_info.items():
-            if key == 'ERRORS':
-                continue
-            split = box.split(factor=0.5)
-            split.label(text=key, icon='DOT')
-            split.label(text=value)
+            for key, value in provider_info.items():
+                if key == 'ERRORS':
+                    continue
+                split = box.split(factor=0.5)
+                split.label(text=key, icon='DOT')
+                split.label(text=value)
 
         # Advanced properties panel
         advanced_icon = 'TRIA_RIGHT' if not self.show_advanced else 'TRIA_DOWN'
@@ -221,74 +238,88 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         box.prop(self, 'show_advanced', emboss=False, icon=advanced_icon)
 
         if self.show_advanced:
-            row = box.row()
-            row.prop(self, 'session_id')
-            row = box.row(align=True)
-            row.prop(self, 'blender_dist_custom', text='')
-            if not self.blender_dist_custom:
-                row.prop(self, 'blender_dist')
-            else:
-                row.prop(self, 'blender_dist_url')
-                box.row().prop(self, 'blender_dist_checksum')
-            box_box = box.box()
+            if self.resource_provider != 'local':
+                row = box.row()
+                row.prop(self, 'session_id')
+                row = box.row(align=True)
+                row.prop(self, 'blender_dist_custom', text='')
+                if not self.blender_dist_custom:
+                    row.prop(self, 'blender_dist')
+                else:
+                    row.prop(self, 'blender_dist_url')
+                    box.row().prop(self, 'blender_dist_checksum')
 
+            box_box = box.box()
             box_box.label(text='Manager')
+            if self.resource_provider != 'local':
+                row = box_box.row()
+                row.prop(self, 'manager_instance_type', text='Type')
+                row = box_box.row()
+                price = BlendNet.addon.getManagerPriceBG(self.manager_instance_type, context)
+                if price[0] < 0.0:
+                    row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
+                        self.manager_instance_type, price[1]
+                    ), icon='ERROR')
+                else:
+                    row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 12), price[1]))
+
+            if self.resource_provider == 'local':
+                row = box_box.row()
+                row.use_property_split = True
+                row.prop(self, 'manager_address')
+                row = box_box.row()
+                row.use_property_split = True
+                row.prop(self, 'manager_ca_path')
             row = box_box.row()
-            row.prop(self, 'manager_instance_type', text='Type')
-            row = box_box.row()
-            price = BlendNet.addon.getManagerPriceBG(self.manager_instance_type, context)
-            if price[0] < 0.0:
-                row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
-                    self.manager_instance_type, price[1]
-                ), icon='ERROR')
-            else:
-                row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 12), price[1]))
-            row = box_box.row()
-            row.prop(self, 'manager_address')
-            row.enabled = False # TODO: remove it when functionality will be available
-            row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'manager_port')
             row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'manager_user')
             row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'manager_password')
 
             box_box = box.box()
             box_box.label(text='Agent')
-            row = box_box.row()
-            row.prop(self, 'agent_use_cheap_instance')
-            if 'Cheap instances not available' in provider_info.get('ERRORS', []):
-                row.enabled = False
-            else:
-                row.prop(self, 'agent_cheap_multiplier')
-            row = box_box.row()
-            row.enabled = not BlendNet.addon.isManagerCreated()
-            row.prop(self, 'manager_agent_instance_type', text='Agents type')
-            row.prop(self, 'manager_agents_max', text='Agents max')
-            row = box_box.row()
-            price = BlendNet.addon.getAgentPriceBG(self.manager_agent_instance_type, context)
-            if price[0] < 0.0:
-                row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
-                    self.manager_agent_instance_type, price[1]
-                ), icon='ERROR')
-            else:
-                row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
-                    round(price[0] * self.manager_agents_max, 12), price[1]
-                ))
-            min_price = BlendNet.addon.getMinimalCheapPriceBG(self.manager_agent_instance_type, context)
-            if min_price > 0.0:
+            if self.resource_provider != 'local':
                 row = box_box.row()
-                row.label(text='Minimal combined price: ~%s/Hour' % (
-                    round(min_price * self.manager_agents_max, 12),
-                ))
-                if price[0] <= min_price:
+                row.prop(self, 'agent_use_cheap_instance')
+                if 'Cheap instances not available' in provider_info.get('ERRORS', []):
+                    row.enabled = False
+                else:
+                    row.prop(self, 'agent_cheap_multiplier')
+                row = box_box.row()
+                row.enabled = not BlendNet.addon.isManagerCreated()
+                row.prop(self, 'manager_agent_instance_type', text='Agents type')
+                row.prop(self, 'manager_agents_max', text='Agents max')
+                row = box_box.row()
+                price = BlendNet.addon.getAgentPriceBG(self.manager_agent_instance_type, context)
+                if price[0] < 0.0:
+                    row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
+                        self.manager_agent_instance_type, price[1]
+                    ), icon='ERROR')
+                else:
+                    row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
+                        round(price[0] * self.manager_agents_max, 12), price[1]
+                    ))
+                min_price = BlendNet.addon.getMinimalCheapPriceBG(self.manager_agent_instance_type, context)
+                if min_price > 0.0:
                     row = box_box.row()
-                    row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
+                    row.label(text='Minimal combined price: ~%s/Hour' % (
+                        round(min_price * self.manager_agents_max, 12),
+                    ))
+                    if price[0] <= min_price:
+                        row = box_box.row()
+                        row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
             row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'agent_port')
             row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'agent_user')
             row = box_box.row()
+            row.use_property_split = True
             row.prop(self, 'agent_password')
 
 class BlendNetSceneSettings(bpy.types.PropertyGroup):
@@ -718,7 +749,7 @@ class BlendNetGetLogOperation(bpy.types.Operator):
             bpy.ops.text.open(filepath=log_file.name, internal=True)
 
             # Opening new window to show the log
-            bpy.ops.screen.userpref_show("INVOKE_DEFAULT")
+            bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
             area = bpy.context.window_manager.windows[-1].screen.areas[0]
             if area.type == 'PREFERENCES':
                 area.type = 'TEXT_EDITOR'
@@ -1019,18 +1050,18 @@ class BlendNetRenderPanel(bpy.types.Panel):
 
         box = layout.box()
         row = box.row()
-        row.label(text='BlendNet Render (%s)' % (prefs.cloud_provider,))
+        row.label(text='BlendNet Render (%s)' % (prefs.resource_provider,))
         row.label(text=context.window_manager.blendnet.status)
         row = box.row()
         row.use_property_split = True
         row.use_property_decorate = False # No prop animation
-        row.prop(bn, 'scene_memory_req', text='Scene required RAM (GB)')
+        row.prop(bn, 'scene_memory_req', text='Render RAM (GB)')
 
         if not BlendNet.addon.checkAgentMemIsEnough():
             box.label(text='WARN: Agent does not have enough memory to render the scene', icon='ERROR')
         if not prefs.agent_use_cheap_instance:
             box.label(text='WARN: No cheap VMs available, check addon settings', icon='ERROR')
-        if not BlendNet.addon.checkProviderIsGood(prefs.cloud_provider):
+        if not BlendNet.addon.checkProviderIsGood(prefs.resource_provider):
             box.label(text='ERROR: Provider init failed, check addon settings', icon='ERROR')
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
@@ -1056,8 +1087,10 @@ class BlendNetManagerPanel(bpy.types.Panel):
 
         layout.label(text='Manager')
         layout.label(text='%s' % BlendNet.addon.getManagerStatus())
-        layout.operator('blendnet.togglemanager', icon='ADD' if not BlendNet.addon.isManagerStarted() else 'X')
-        layout.operator('blendnet.destroymanager', icon='TRASH')
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if prefs.resource_provider != 'local':
+            layout.operator('blendnet.togglemanager', icon='ADD' if not BlendNet.addon.isManagerStarted() else 'X')
+            layout.operator('blendnet.destroymanager', icon='TRASH')
 
     def draw(self, context):
         layout = self.layout
@@ -1065,17 +1098,22 @@ class BlendNetManagerPanel(bpy.types.Panel):
         layout.use_property_decorate = False # No prop animation
         prefs = bpy.context.preferences.addons[__package__].preferences
 
-        row = layout.row()
-        row.enabled = not BlendNet.addon.isManagerCreated()
-        row.prop(prefs, 'manager_instance_type', text='Type')
-        price = BlendNet.addon.getManagerPriceBG(prefs.manager_instance_type, context)
-        row = layout.row()
-        if price[0] < 0.0:
-            row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
-                prefs.manager_instance_type, price[1]
-            ), icon='ERROR')
-        else:
-            row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 8), price[1]))
+        if prefs.resource_provider != 'local':
+            row = layout.row()
+            row.enabled = not BlendNet.addon.isManagerCreated()
+            row.prop(prefs, 'manager_instance_type', text='Type')
+            price = BlendNet.addon.getManagerPriceBG(prefs.manager_instance_type, context)
+            row = layout.row()
+            if price[0] < 0.0:
+                row.label(text='WARNING: Unable to find price for the type "%s": %s' % (
+                    prefs.manager_instance_type, price[1]
+                ), icon='ERROR')
+            else:
+                row.label(text='Calculated price: ~%s/Hour (%s)' % (round(price[0], 8), price[1]))
+        if prefs.resource_provider == 'local':
+            split = layout.split(factor=0.3)
+            split.label(text='Address')
+            split.label(text='%s:%s' % (prefs.manager_address, prefs.manager_port))
         row = layout.row()
         row.operator('blendnet.getlog', text='Get Manager Log', icon='TEXT').agent_name = ''
         row.enabled = BlendNet.addon.isManagerActive()
@@ -1124,32 +1162,33 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         layout.use_property_decorate = False # No prop animation
         prefs = bpy.context.preferences.addons[__package__].preferences
 
-        row = layout.row()
-        row.prop(prefs, 'manager_agent_instance_type', text='Agents type')
-        row.enabled = not BlendNet.addon.isManagerStarted()
-        row = layout.row()
-        row.prop(prefs, 'manager_agents_max', text='Agents max')
-        row.enabled = not BlendNet.addon.isManagerStarted()
-        row = layout.row()
-        price = BlendNet.addon.getAgentPriceBG(prefs.manager_agent_instance_type, context)
-        if price[0] < 0.0:
-            row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
-                prefs.manager_agent_instance_type, price[1]
-            ), icon='ERROR')
-        else:
-            row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
-                round(price[0] * prefs.manager_agents_max, 8), price[1]
-            ))
-
-        min_price = BlendNet.addon.getMinimalCheapPriceBG(prefs.manager_agent_instance_type, context)
-        if min_price > 0.0:
+        if prefs.resource_provider != 'local':
             row = layout.row()
-            row.label(text='Minimal combined price: ~%s/Hour' % (
-                round(min_price * prefs.manager_agents_max, 8),
-            ))
-            if price[0] <= min_price:
+            row.prop(prefs, 'manager_agent_instance_type', text='Agents type')
+            row.enabled = not BlendNet.addon.isManagerStarted()
+            row = layout.row()
+            row.prop(prefs, 'manager_agents_max', text='Agents max')
+            row.enabled = not BlendNet.addon.isManagerStarted()
+            row = layout.row()
+            price = BlendNet.addon.getAgentPriceBG(prefs.manager_agent_instance_type, context)
+            if price[0] < 0.0:
+                row.label(text='ERROR: Unable to find price for the type "%s": %s' % (
+                    prefs.manager_agent_instance_type, price[1]
+                ), icon='ERROR')
+            else:
+                row.label(text='Calculated combined price: ~%s/Hour (%s)' % (
+                    round(price[0] * prefs.manager_agents_max, 8), price[1]
+                ))
+
+            min_price = BlendNet.addon.getMinimalCheapPriceBG(prefs.manager_agent_instance_type, context)
+            if min_price > 0.0:
                 row = layout.row()
-                row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
+                row.label(text='Minimal combined price: ~%s/Hour' % (
+                    round(min_price * prefs.manager_agents_max, 8),
+                ))
+                if price[0] <= min_price:
+                    row = layout.row()
+                    row.label(text='ERROR: Selected cheap price is lower than minimal one', icon='ERROR')
 
         agents = BlendNet.addon.getResources(context).get('agents', {})
         if agents:
@@ -1284,8 +1323,8 @@ def initPreferences():
     prefs = bpy.context.preferences.addons[__package__].preferences
 
     # Set defaults for preferences
-    # Update cloud_provider anyway to set the addon var
-    prefs.cloud_provider = prefs.cloud_provider or BlendNet.addon.getAddonDefaultProvider()
+    # Update resource_provider anyway to set the addon var
+    prefs.resource_provider = prefs.resource_provider or BlendNet.addon.getAddonDefaultProvider()
 
     # Since default for property will be regenerated every restart
     # we generate new session id if the current one is empty
@@ -1354,5 +1393,5 @@ def unregister():
     bpy.utils.unregister_class(BlendNetSceneSettings)
     bpy.utils.unregister_class(BlendNetAddonPreferences)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     register()

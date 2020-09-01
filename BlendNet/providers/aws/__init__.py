@@ -1,7 +1,15 @@
 '''Amazon Web Services
 Provide API access to allocate required resources in AWS
 Dependencies: aws cli v2
+Help: https://github.com/state-of-the-art/BlendNet/wiki/HOWTO:-Setup-provider:-Amazon-Web-Services-(AWS)
 '''
+
+__all__ = [
+    'Processor',
+    'Manager',
+    'Agent',
+    'Instance',
+]
 
 # Exception to notify that the command returned exitcode != 0
 class AwsToolException(Exception):
@@ -732,6 +740,7 @@ def getMinimalCheapPrice(inst_type):
 
 findAWSTool()
 
+from .Processor import Processor
 from .Manager import Manager
 from .Agent import Agent
 from .Instance import Instance

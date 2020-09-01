@@ -3,6 +3,7 @@
 '''BlendNet Agent REST
 
 Description: REST interface for Agent
+Run: /srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
 '''
 
 import os, sys

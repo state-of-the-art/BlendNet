@@ -18,7 +18,7 @@ class ManagerTaskConfig(TaskConfig):
             'description': '''How much agents to use from the pool''',
             'type': int,
             'validation': lambda cfg, val: val <= cfg._parent._parent._cfg.agents_max,
-            'min': 1,
+            'min': 0,
             'default': lambda cfg: cfg._parent._parent._cfg.agents_max,
         }
 
