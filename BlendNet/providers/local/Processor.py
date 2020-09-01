@@ -34,6 +34,17 @@ class Processor:
 
         return { 'success': True, 'message': 'Agent configured' }
 
+    @SimpleREST.delete('agent/*')
+    def agent_remove(self, req, parts):
+        '''Remove the custom agent from the pool'''
+        if not self._e.agentGet(parts[0]):
+            return { 'success': False, 'message': 'Unable to find the agent' }
+
+        if not self._e.agentCustomRemove(parts[0]):
+            return { 'success': False, 'message': 'Error during removing the agent' }
+
+        return { 'success': True, 'message': 'Agent removed' }
+
     @SimpleREST.get('agent')
     def agents_list(self, req = None):
         '''List the available custom agents'''

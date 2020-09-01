@@ -8,7 +8,7 @@ Description: Multithread worker
 import threading # Sync between threads needed
 import queue
 
-class Workers:
+class Workers(object):
     def __init__(self, name, max_workers, worker_func):
         print('DEBUG: Creating Workers "%s"' % name)
         self._enabled = True
