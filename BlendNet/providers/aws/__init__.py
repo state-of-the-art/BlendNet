@@ -520,7 +520,9 @@ def _isInstanceSpot(instance_id):
     data = _executeAwsTool('ec2', 'describe-instances',
                            '--instance-ids', instance_id,
                            '--query', 'Reservations[].Instances[].InstanceLifecycle')
-    if len(data) != 1:
+    if len(data) == 0:
+        return False
+    elif len(data) > 1:
         raise AwsToolException('Error in request of instance lifecycle for "%s": %s' % (instance_id, data))
 
     return data[0] == 'spot'
