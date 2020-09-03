@@ -70,7 +70,7 @@ def downloadDataFromBucket(bucket_name, path):
         import bpy
         prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
 
-        with open(prefs.manager_ca_path, 'rb') as fh:
+        with open(bpy.path.abspath(prefs.manager_ca_path), 'rb') as fh:
             return fh.read()
     except:
         pass
