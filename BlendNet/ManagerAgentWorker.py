@@ -252,6 +252,10 @@ class ManagerAgentWorker(object):
             self._cfg['instance_name'] = self._name
             self._id = providers.createInstanceAgent(self._cfg)
 
+    def runAgent(self):
+        '''Start the Agent node and connect client'''
+        threading.Thread(target=self._waitAgent).start()
+
     def _waitAgent(self):
         '''Will wait for agent availability'''
         with self._wait_agent_lock:

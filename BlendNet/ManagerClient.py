@@ -24,9 +24,21 @@ class ManagerClient(Client):
             ManagerClient._engine._address = address
             ManagerClient._engine._cfg = cfg
 
-    def agents(self):
+    def resources(self):
         '''Get the list of agents with info'''
-        return self._engine.get('agent')
+        res = self._engine.get('resources')
+        if not res:
+            return {'agents':{}}
+        if not res.get('manager'):
+            return res
+
+        # Set the client ip if manager have not provided the addresses
+        if not res['manager'].get('ip'):
+            res['manager']['ip'] = self._engine._address
+        if not res['manager'].get('internal_ip'):
+            res['manager']['internal_ip'] = self._engine._address
+
+        return res
 
     def agentCreate(self, agent_name, conf):
         '''Create the new agent'''

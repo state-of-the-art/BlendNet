@@ -217,7 +217,13 @@ def getResources(context = None):
 
     def worker(provider, area):
         global resources_list_cache
-        result = providers.getResources(getConfig()['session_id'])
+
+        # Switch to getting the resources from the Manager if it's active
+        result = {}
+        if isManagerActive():
+            result = ManagerClient(getManagerIP(), getConfig()).resources()
+        else:
+            result = providers.getResources(getConfig()['session_id'])
 
         if resources_list_cache[1] == provider:
             resources_list_cache[0] = result

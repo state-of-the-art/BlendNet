@@ -11,15 +11,18 @@ __all__ = [
 
 from ...ManagerClient import ManagerClient
 
-# Stores the custom agents added to the Manager
-CUSTOM_AGENTS = {}
+# Contains the custom local provider resources
+LOCAL_RESOURCES = {'agents': {}}
 
 def getProviderInfo():
     return {}
 
 def getResources(session_id):
     '''Get the available resources from the Manager'''
-    out = {'agents': CUSTOM_AGENTS.copy()}
+    out = {
+        'manager': LOCAL_RESOURCES.get('manager', {}).copy(),
+        'agents': LOCAL_RESOURCES.get('agents', {}).copy()
+    }
 
     try:
         import bpy
@@ -29,33 +32,12 @@ def getResources(session_id):
         if not prefs.manager_address:
             return out
 
-        agents = ManagerClient(prefs.manager_address, {
+        out = ManagerClient(prefs.manager_address, {
             'listen_port': prefs.manager_port,
             'auth_user': prefs.manager_user,
             'auth_password': prefs.manager_password_hidden,
-        }).agents()
+        }).resources()
 
-        for name, info in agents.items():
-            out['agents'][name] = {
-                'id': name,
-                'name': name,
-                'ip': info.get('ip'),
-                'internal_ip': info.get('internal_ip'),
-                'type': 'custom',
-                'started': info.get('started'),
-                'stopped': info.get('stopped'),
-                'created': info.get('created'),
-            }
-        out['manager'] = {
-            'id': prefs.manager_address,
-            'name': prefs.manager_address,
-            'ip': prefs.manager_address,
-            'internal_ip': prefs.manager_address,
-            'type': 'custom',
-            'started': True,
-            'stopped': False,
-            'created': 'unknown',
-        }
     except Exception as e:
         pass
 
@@ -84,6 +66,8 @@ def downloadDataFromBucket(bucket_name, path):
 
 def createInstanceAgent(cfg):
     '''The agent is created already - so returning just the name'''
+    LOCAL_RESOURCES['agents'][cfg['instance_name']]['started'] = True
+    LOCAL_RESOURCES['agents'][cfg['instance_name']]['stopped'] = False
     return cfg['instance_name']
 
 
