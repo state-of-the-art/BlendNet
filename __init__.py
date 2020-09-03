@@ -608,8 +608,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         if not self._task_name:
             # If the operation is not completed - reuse the same task name
             d = datetime.utcnow().strftime('%y%m%d%H%M')
-            self._task_name = '%s-%s-%d-%s' % (
-                BlendNet.addon.passAlphanumString(fname[:-6]),
+            self._task_name = '%s%s-%d-%s' % (
+                BlendNet.addon.getTaskProjectPrefix(),
                 d, scene.frame_current,
                 BlendNet.addon.genRandomString(3)
             )
@@ -892,6 +892,31 @@ class BlendNetTaskStartOperation(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BlendNetTaskDownloadOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.taskdownload'
+    bl_label = 'Download task render'
+    bl_description = 'Download the completed task render'
+
+    @classmethod
+    def poll(cls, context):
+        bn = context.window_manager.blendnet
+        if len(bn.manager_tasks) <= bn.manager_tasks_idx:
+            return False
+        task_state = bn.manager_tasks[bn.manager_tasks_idx].state
+        return task_state in {'COMPLETED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
+        result = BlendNet.addon.managerDownloadTaskResult(task_name, 'render')
+        if not result:
+            self.report({'INFO'}, 'Downloading the final render for %s... ' % (task_name,))
+            return {'FINISHED'}
+
+        self.report({'INFO'}, 'The file is already downloaded and seems the same for %s... ' % (task_name,))
+        return {'CANCELLED'}
+
 class BlendNetTaskStopOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskstop'
     bl_label = 'Task stop'
@@ -1126,6 +1151,7 @@ class BlendNetTaskMenu(bpy.types.Menu):
         layout.operator('blendnet.taskinfo', icon='INFO')
         layout.operator('blendnet.taskmessages', icon='TEXT')
         layout.operator('blendnet.taskdetails', icon='TEXT')
+        layout.operator('blendnet.taskdownload', icon='DOWNARROW_HLT')
         layout.operator('blendnet.taskstart', icon='PLAY')
         layout.operator('blendnet.taskremove', icon='TRASH')
         layout.operator('blendnet.taskstop', icon='PAUSE')
@@ -1398,7 +1424,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             if status.get('state') == 'COMPLETED':
                 if not loaded_final_render:
                     total_time = self.secToTime((status.get('end_time') or 0) - (status.get('start_time_actual') or 0))
-                    # File is downloaded in background by a separated thread
+                    # File is going to be downloaded by BlendNet.addon.updateManagerTasks()
                     out_file = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].received
                     if os.path.isfile(out_file):
                         self.updateStats('Got the final render! | Task render time: %s' % total_time)
@@ -1464,6 +1490,7 @@ def register():
     bpy.utils.register_class(BlendNetTaskInfoOperation)
     bpy.utils.register_class(BlendNetTaskMessagesOperation)
     bpy.utils.register_class(BlendNetTaskDetailsOperation)
+    bpy.utils.register_class(BlendNetTaskDownloadOperation)
     bpy.utils.register_class(BlendNetTaskStartOperation)
     bpy.utils.register_class(BlendNetTaskStopOperation)
     bpy.utils.register_class(BlendNetTasksStopStartedOperation)
@@ -1495,6 +1522,7 @@ def unregister():
     bpy.utils.unregister_class(BlendNetTasksStopStartedOperation)
     bpy.utils.unregister_class(BlendNetTaskStopOperation)
     bpy.utils.unregister_class(BlendNetTaskStartOperation)
+    bpy.utils.unregister_class(BlendNetTaskDownloadOperation)
     bpy.utils.unregister_class(BlendNetTaskDetailsOperation)
     bpy.utils.unregister_class(BlendNetTaskMessagesOperation)
     bpy.utils.unregister_class(BlendNetTaskPreviewOperation)
