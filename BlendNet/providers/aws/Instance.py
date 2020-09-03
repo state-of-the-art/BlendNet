@@ -13,8 +13,8 @@ from . import _requestMetadata
 from .. import InstanceProvider
 
 class Instance(InstanceProvider):
-    def __init__(self):
-        InstanceProvider.__init__(self)
+    def __init__(self, conf):
+        InstanceProvider.__init__(self, conf)
 
         self._terminatingWatchersReset()
 

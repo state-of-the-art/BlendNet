@@ -10,7 +10,7 @@ import threading # Locks
 from abc import ABC, abstractmethod
 
 class InstanceProvider(ABC):
-    def __init__(self):
+    def __init__(self, conf):
         self._terminating_lock = threading.Lock()
         self._terminating = None
 

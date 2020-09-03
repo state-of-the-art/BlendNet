@@ -1326,13 +1326,30 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         agents = BlendNet.addon.getResources(context).get('agents', {})
         if agents:
             box = layout.box()
-            for inst_id, info in agents.items():
+            for inst_id in sorted(agents.keys()):
+                info = agents[inst_id]
                 split = box.split(factor=0.8)
                 split.label(text=info.get('name'))
-                split.operator('blendnet.getlog', text='Log', icon='TEXT').agent_name = info.get('name')
-                split.enabled = BlendNet.addon.isManagerActive()
+                row = split.row()
+                row.enabled = BlendNet.addon.isManagerActive()
+
+                # The Agent status
+                if info.get('error'):
+                    row.label(icon='ERROR') # You need to check logs
+                if info.get('active'):
+                    row.label(icon='CHECKMARK') # Agent is active
+                elif info.get('started'):
+                    row.label(icon='REC') # Node is started, but Agent is initializing
+                elif info.get('stopped'):
+                    row.label(icon='PAUSE') # Node is stopped
+                else:
+                    row.label(icon='X') # Node is terminated or unknown state
+
+                col = row.column()
+                col.operator('blendnet.getlog', text='', icon='TEXT').agent_name = info.get('name')
+                col.enabled = bool(info.get('active'))
                 if prefs.resource_provider == 'local':
-                    split.operator('blendnet.agentremove', icon='TRASH', text='').agent_name = info.get('name')
+                    row.operator('blendnet.agentremove', icon='TRASH', text='').agent_name = info.get('name')
 
 class BlendNetRenderEngine(bpy.types.RenderEngine):
     '''Continuous render engine allows to switch between the tasks'''

@@ -710,7 +710,7 @@ def getResources(session_id):
             'id': it['name'],
             'name': it['name'],
             'ip': access_cfgs[0].get('natIP'),
-            'internal_ip': it['networkInterfaces'][0]['networkIP'],
+            'internal_ip': it['networkInterfaces'][0].get('networkIP'),
             'type': it['machineType'].rsplit('/', 1)[1],
             'started': it['status'] == 'RUNNING',
             'stopped': it['status'] == 'TERMINATED',

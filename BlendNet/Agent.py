@@ -28,5 +28,5 @@ class AgentConfig(TaskExecutorConfig):
 class Agent(providers.Agent, TaskExecutorBase):
     def __init__(self, conf):
         print('DEBUG: Creating Agent instance')
-        providers.Agent.__init__(self)
+        providers.Agent.__init__(self, conf)
         TaskExecutorBase.__init__(self, AgentTask, AgentConfig(self, conf))

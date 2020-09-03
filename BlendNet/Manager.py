@@ -87,7 +87,7 @@ class ManagerConfig(TaskExecutorConfig):
 class Manager(providers.Manager, TaskExecutorBase):
     def __init__(self, conf):
         print('DEBUG: Creating Manager instance')
-        providers.Manager.__init__(self)
+        providers.Manager.__init__(self, conf)
         TaskExecutorBase.__init__(self, ManagerTask, ManagerConfig(self, conf))
 
         self._agents_pool_lock = threading.Lock()
@@ -165,7 +165,15 @@ class Manager(providers.Manager, TaskExecutorBase):
                 self._check_resources_timer.start()
 
         with self._resources_lock:
-            return self._resources
+            # Modify the provider resources to add more info for the Agents
+            out = {'manager': self._resources.get('manager'), 'agents': {}}
+            for name, info in self._resources.get('agents', {}).items():
+                out['agents'][name] = info.copy()
+                agent = self.agentGet(name)
+                if agent:
+                    out['agents'][name]['active'] = agent.isActive()
+                    # TODO: add error flag/message here if it's happened
+            return out
 
     def resourcesGetWait(self):
         '''Runs the resources get, updates the cache and return it'''

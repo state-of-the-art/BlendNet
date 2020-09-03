@@ -21,6 +21,16 @@ class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
         super().__init__(Manager(conf), prefix)
 
+    @SimpleREST.get('resources')
+    def resources(self, req = None):
+        '''Returns the available resources'''
+
+        return {
+            'success': True,
+            'message': 'Resources got',
+            'data': self._e.resourcesGet(),
+        }
+
     @SimpleREST.get('agent/*/log')
     def agent_log(self, req, parts):
         '''Returns the information about the task'''

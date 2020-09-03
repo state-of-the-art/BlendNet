@@ -7,20 +7,33 @@ Description: Implementation of the Local manager
 
 from datetime import datetime
 
-from . import CUSTOM_AGENTS
+from . import LOCAL_RESOURCES
 from .. import InstanceProvider
 from ...ManagerAgentWorker import ManagerAgentWorker
 
 class Manager(InstanceProvider):
+    def __init__(self, conf):
+        super().__init__(conf)
+        LOCAL_RESOURCES['manager'] = {
+            'id': conf.get('name', 'None'),
+            'name': conf.get('name', 'None'),
+            'ip': conf.get('ip'),
+            'internal_ip': conf.get('internal_ip', conf.get('ip')),
+            'type': 'custom',
+            'started': True,
+            'stopped': False,
+            'created': datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000%z'),
+        }
+
     def agentCustomCreate(self, agent_name, conf):
         '''Create new custom agent worker'''
-        CUSTOM_AGENTS[agent_name] = {
+        LOCAL_RESOURCES['agents'][agent_name] = {
             'id': agent_name,
             'name': agent_name,
             'ip': conf.get('address', None),
             'internal_ip': conf.get('address', None),
             'type': 'custom',
-            'started': True,
+            'started': False,
             'stopped': False,
             'created': datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000%z'),
         }
@@ -32,7 +45,10 @@ class Manager(InstanceProvider):
         }
         with self._agents_pool_lock:
             self._cfg.agents_max += 1
-            self._agents_pool.append(ManagerAgentWorker(self, agent_name, cfg))
+            worker = ManagerAgentWorker(self, agent_name, cfg)
+            self._agents_pool.append(worker)
+            # Run the Agent on worker
+            worker.runAgent()
         return True
 
     def agentCustomRemove(self, agent_name):
@@ -50,14 +66,10 @@ class Manager(InstanceProvider):
                 self._cfg.agents_max -= 1
                 self._agents_pool[worker_id].stop()
                 del self._agents_pool[worker_id]
-                del CUSTOM_AGENTS[agent_name]
+                del LOCAL_RESOURCES['agents'][agent_name]
                 return True
 
         return False
-
-    def agentCustomList(self):
-        '''Returns the list of custom agents and their info'''
-        return CUSTOM_AGENTS.copy()
 
     def timeToTerminating(self):
         return 0

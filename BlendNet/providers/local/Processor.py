@@ -12,13 +12,13 @@ from ... import SimpleREST
 class Processor:
     @SimpleREST.put('agent/*/config')
     def agent_set_config(self, req, parts):
-        '''Set the custom agent configuration as json (max 512KB)'''
+        '''Set the custom agent configuration as json (max 128KB)'''
         length = req.headers['content-length']
         if not length:
             return { 'success': False, 'message': 'Unable to find "Content-Length" header' }
 
-        if int(length) > 512*1024: # Max 512KB
-            return { 'success': False, 'message': 'Unable read too big agent configuration (> 512KB)' }
+        if int(length) > 128*1024: # Max 128KB
+            return { 'success': False, 'message': 'Unable read too big agent configuration (> 128KB)' }
 
         conf = None
         try:
@@ -44,13 +44,3 @@ class Processor:
             return { 'success': False, 'message': 'Error during removing the agent' }
 
         return { 'success': True, 'message': 'Agent removed' }
-
-    @SimpleREST.get('agent')
-    def agents_list(self, req = None):
-        '''List the available custom agents'''
-
-        return {
-            'success': True,
-            'message': 'Agent configured',
-            'data': self._e.agentCustomList(),
-        }
