@@ -311,7 +311,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 --checkpoint=10000 --checkpoint-action=echo='Unpacked %{{r}}T' -xf /tmp/blender.tar.bz2
 fi
 
 echo '--> Download & run the BlendNet manager'
@@ -399,10 +399,13 @@ systemctl start blendnet-manager.service # We don't need "enable" here
     }
 
     # Creating an instance
-    resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
+    try:
+        resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
 
-    # Waiting for the operation to complete
-    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+        # Waiting for the operation to complete
+        resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+    except Exception as e:
+        print('WARN: Unable to create manager %s due to error: %s' % (cfg['instance_name'], str(e)))
 
     return cfg['instance_name']
 
@@ -431,7 +434,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 --checkpoint=10000 --checkpoint-action=echo='Unpacked %{{r}}T' -xf /tmp/blender.tar.bz2
 fi
 
 echo '--> Download & run the BlendNet agent'
@@ -521,10 +524,13 @@ systemctl start blendnet-agent.service # We don't need "enable" here
     }
 
     # Creating an instance
-    resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
+    try:
+        resp = compute.instances().insert(project=configs['project'], zone=configs['zone'], body=data).execute()
 
-    # Waiting for the operation to complete
-    resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+        # Waiting for the operation to complete
+        resp = _waitForOperation(compute, configs['project'], configs['zone'], resp['id'])
+    except Exception as e:
+        print('WARN: Unable to create agent %s due to error: %s' % (cfg['instance_name'], str(e)))
 
     return cfg['instance_name']
 
@@ -729,13 +735,24 @@ def getResources(session_id):
             if it['labels'].get('type') == 'manager':
                 out['manager'] = inst
             elif it['labels'].get('type') == 'agent':
-                out['agents'][inst['id']] = inst
+                out['agents'][inst['name']] = inst
             else:
                 print('WARN: Unknown resource instance %s' % inst['name'])
 
         req = compute.instances().list_next(previous_request=req, previous_response=resp)
 
     return out
+
+def getNodeLog(instance_id):
+    '''Get the instance serial output log'''
+    compute, configs = _getCompute(), _getConfigs()
+
+    resp = compute.instances().getSerialPortOutput(
+        project=configs['project'], zone=configs['zone'],
+        instance=instance_id, start=str(-256*1024), # Last 256KB
+    ).execute()
+
+    return resp.get('contents', '')
 
 def getManagerSizeDefault():
     return 'n1-standard-1'

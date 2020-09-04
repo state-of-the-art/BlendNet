@@ -54,18 +54,18 @@ class Manager(InstanceProvider):
     def agentCustomRemove(self, agent_name):
         '''Remove the existing custom agent worker'''
         with self._agents_pool_lock:
-            worker_id = -1
+            worker_index = -1
             for i, worker in enumerate(self._agents_pool):
                 if worker.name() != agent_name:
                     continue
                 if worker.busy():
                     return False
-                worker_id = i
+                worker_index = i
 
-            if worker_id >= 0:
+            if worker_index >= 0:
                 self._cfg.agents_max -= 1
-                self._agents_pool[worker_id].stop()
-                del self._agents_pool[worker_id]
+                self._agents_pool[worker_index].stop()
+                del self._agents_pool[worker_index]
                 del LOCAL_RESOURCES['agents'][agent_name]
                 return True
 

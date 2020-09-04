@@ -12,8 +12,10 @@ import ssl
 import site
 import random
 import string
+import tempfile
 from urllib.request import urlopen
 from html.parser import HTMLParser
+from datetime import datetime
 
 from . import providers
 from . import ManagerClient
@@ -239,9 +241,11 @@ def getResources(context = None):
 
     return info[0]
 
+def getNodeLog(instance_id, context = None):
+    return providers.getNodeLog(instance_id)
+
 def getManagerIP(context = None):
-    res = getResources(context)
-    return res.get('manager', {}).get('ip')
+    return getResources(context).get('manager', {}).get('ip')
 
 def getManagerStatus():
     if isManagerStarted():
@@ -407,14 +411,19 @@ def stopManager(cfg = None):
         providers.stopInstance(getResources()['manager']['id'])
 
 def destroyManager(cfg = None):
-    cfg = cfg if cfg else getConfig()
-
-    def worker(cfg):
+    def worker():
         if isManagerStopped():
             print('DEBUG: Destroying manager instance')
             providers.deleteInstance(getResources()['manager']['id'])
 
-    _runBackgroundWork(worker, getConfig())
+    _runBackgroundWork(worker)
+
+def destroyAgent(agent_name):
+    def worker():
+        print('DEBUG: Destroying agent instance ' + agent_name)
+        providers.deleteInstance(getResources()['agents'][agent_name]['id'])
+
+    _runBackgroundWork(worker)
 
 def toggleManager():
     '''Running the manager instance if it's not already started or stopping it'''
@@ -781,3 +790,24 @@ def getMinimalCheapPriceBG(inst_type, context = None):
         _runBackgroundWork(worker, callback)
 
     return info[0]
+
+def showLogWindow(prefix, data):
+    '''Opens a new window and shows the log in it'''
+    log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8',
+            prefix=prefix + '_' + datetime.now().strftime('%y%m%d-%H%M%S_'),
+            suffix='.log')
+    log_file.write(data)
+    log_file.flush()
+
+    bpy.ops.text.open(filepath=log_file.name, internal=True)
+
+    # Opening new window to show the log
+    bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
+    area = bpy.context.window_manager.windows[-1].screen.areas[0]
+    if area.type == 'PREFERENCES':
+        area.type = 'TEXT_EDITOR'
+        area.spaces[0].show_line_numbers = False
+        area.spaces[0].show_syntax_highlight = False
+        area.spaces[0].text = bpy.data.texts[os.path.basename(log_file.name)]
+        return True
+    return False

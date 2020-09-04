@@ -28,9 +28,9 @@ class ManagerClient(Client):
         '''Get the list of agents with info'''
         res = self._engine.get('resources')
         if not res:
-            return {'agents':{}}
+            return {'agents': {}}
         if not res.get('manager'):
-            return res
+            return {'agents': res.get('agents', {})}
 
         # Set the client ip if manager have not provided the addresses
         if not res['manager'].get('ip'):

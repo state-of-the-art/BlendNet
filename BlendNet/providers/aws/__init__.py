@@ -283,9 +283,9 @@ def createInstanceManager(cfg):
     _createRoles()
 
     try:
-        _getInstanceId(cfg['instance_name'])
+        inst_id = _getInstanceId(cfg['instance_name'])
         # If it pass here - means the instance is already existing
-        return None
+        return inst_id
     except AwsToolException:
         # No instance existing - than we can proceed
         pass
@@ -332,7 +332,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 --checkpoint=10000 --checkpoint-action=echo='Unpacked %{{r}}T' -xf /tmp/blender.tar.bz2
 fi
 
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
@@ -391,9 +391,9 @@ def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
 
     try:
-        _getInstanceId(cfg['instance_name'])
+        inst_id = _getInstanceId(cfg['instance_name'])
         # If it pass here - means the instance is already existing
-        return None
+        return inst_id
     except AwsToolException:
         # No instance existing - than we can proceed
         pass
@@ -426,13 +426,27 @@ def createInstanceAgent(cfg):
     ]
 
     if cfg['use_cheap_instance']:
-        print('INFO: Running cheap agent instance with max price %f' % (cfg['instance_max_price'],))
+        # Running in the cheapest zone
+        zone_prices = _getZonesMinimalSpotPrice(cfg['instance_type'])
+        (min_price_zone, min_price) = zone_prices.popitem()
+        for zone in zone_prices:
+            if zone_prices[zone] < min_price:
+                min_price = zone_prices[zone]
+                min_price_zone = zone
+        print('INFO: Running cheap agent instance with max price %f in zone %s (min %f)' % (
+            cfg['instance_max_price'],
+            min_price_zone, min_price,
+        ))
+        options.append('--placement')
+        options.append(json.dumps({
+            'AvailabilityZone': min_price_zone,
+        }))
         options.append('--instance-market-options')
         options.append(json.dumps({
-            "MarketType": "spot",
-            "SpotOptions": {
-                "MaxPrice": str(cfg['instance_max_price']),
-                "SpotInstanceType": "one-time",
+            'MarketType': 'spot',
+            'SpotOptions': {
+                'MaxPrice': str(cfg['instance_max_price']),
+                'SpotInstanceType': 'one-time',
             },
         }))
 
@@ -451,7 +465,7 @@ if [ ! -x /srv/blender/blender ]; then
     echo "{blender_sha256} -" > /tmp/blender.sha256
     curl -fLs "{blender_url}" | tee /tmp/blender.tar.bz2 | sha256sum -c /tmp/blender.sha256 || (echo "ERROR: checksum of the blender binary is incorrect"; exit 1)
     mkdir -p /srv/blender
-    tar -C /srv/blender --strip-components=1 -xvf /tmp/blender.tar.bz2
+    tar -C /srv/blender --strip-components=1 --checkpoint=10000 --checkpoint-action=echo='Unpacked %{{r}}T' -xf /tmp/blender.tar.bz2
 fi
 
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
@@ -665,11 +679,18 @@ def getResources(session_id):
         if it_type == 'manager':
             out['manager'] = inst
         elif it_type == 'agent':
-            out['agents'][inst['id']] = inst
+            out['agents'][inst['name']] = inst
         else:
             print('WARN: Unknown type resource instance %s' % inst['name'])
 
     return out
+
+def getNodeLog(instance_id):
+    '''Get the instance serial output log'''
+    data = _executeAwsTool('ec2', 'get-console-output',
+                           '--instance-id', instance_id)
+
+    return data.get('Output', '')
 
 def getManagerSizeDefault():
     return 't2.micro'
@@ -725,9 +746,8 @@ def getPrice(inst_type, cheap_multiplier):
         print('WARN: Error during getting the instance type price:', url, e)
         return (-1.0, 'ERR: ' + str(e))
 
-
-def getMinimalCheapPrice(inst_type):
-    '''Will check the spot history and retreive the latest minimal price'''
+def _getZonesMinimalSpotPrice(inst_type):
+    '''Returns the minimal spot price for instance type per zone'''
     data = _executeAwsTool('ec2', 'describe-spot-price-history',
                            '--instance-types', json.dumps([inst_type]),
                            '--product-descriptions', json.dumps(['Linux/UNIX']),
@@ -738,7 +758,11 @@ def getMinimalCheapPrice(inst_type):
         if it['AvailabilityZone'] not in min_prices:
             min_prices[it['AvailabilityZone']] = float(it['SpotPrice'])
 
-    return min(min_prices.values())
+    return min_prices
+
+def getMinimalCheapPrice(inst_type):
+    '''Will check the spot history and retreive the latest minimal price'''
+    return min(_getZonesMinimalSpotPrice(inst_type).values())
 
 findAWSTool()
 
