@@ -190,11 +190,13 @@ class ManagerAgentWorker(object):
     def _stateWatcher(self):
         '''Watch on the agent state'''
         print('DEBUG: Starting agent state watcher %s' % self._name)
-        agent = self._parent.resourcesGet().get('agents', {}).get(self._id, {})
+        agent = self._parent.resourcesGet().get('agents', {}).get(self._name, {})
         while self._enabled:
             # Destroy agent if it's type is wrong
-            if agent and agent.get('type') != self._cfg.get('instance_type', 'custom'):
-                print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (self._name, agent.get('type'), self._cfg.get('instance_type')))
+            if agent and agent.get('type') and agent.get('type') != self._cfg.get('instance_type', 'custom'):
+                print('WARN: Agent %s is type "%s" but should be "%s" - terminating' % (
+                    self._name, agent.get('type'), self._cfg.get('instance_type')
+                ))
                 providers.deleteInstance(self._id)
                 self._id = None
 
@@ -209,8 +211,8 @@ class ManagerAgentWorker(object):
                     time.sleep(1.0)
                     continue
 
-            agent = self._parent.resourcesGet().get('agents', {}).get(self._id, {})
-            if not agent:
+            agent = self._parent.resourcesGet().get('agents', {}).get(self._name, {})
+            if not agent or not agent.get('internal_ip'):
                 self._setState(ManagerAgentState.DESTROYED)
                 self._client = None
                 with self._status_lock:
@@ -247,10 +249,11 @@ class ManagerAgentWorker(object):
             self._setState(ManagerAgentState.UNKNOWN)
             providers.startInstance(self._id)
         elif self.state() == ManagerAgentState.DESTROYED:
-            print('DEBUG: Creating a new agent instance "%s"' % self._name)
+            print('DEBUG: Creating a new agent instance "%s"' % (self._name,))
             self._setState(ManagerAgentState.UNKNOWN)
             self._cfg['instance_name'] = self._name
             self._id = providers.createInstanceAgent(self._cfg)
+            print('DEBUG: Created the new agent instance "%s" with id "%s"' % (self._name, self._id))
 
     def runAgent(self):
         '''Start the Agent node and connect client'''

@@ -94,7 +94,12 @@ def uploadDataToBucket(data, bucket, dest_path):
 
 def getResources(session_id):
     '''Returns map of allocated resources - manager and agents'''
+    # Agents are stored with the name keys
     return _execProviderFunc('getResources', {'agents':{}}, session_id)
+
+def getNodeLog(instance_id):
+    '''Returns string with the node serial output log'''
+    return _execProviderFunc('getNodeLog', 'NOT IMPLEMENTED', instance_id)
 
 def getBucketName(session_id):
     return _execProviderFunc('getBucketName', None, session_id)

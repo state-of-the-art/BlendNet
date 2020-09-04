@@ -109,7 +109,7 @@ class Manager(providers.Manager, TaskExecutorBase):
         # Let's delete the agents
         with self._agents_pool_lock:
             for agent in self._agents_pool:
-                print('WARN: Deleting the agent %s due to Manager termination' % agent._name)
+                print('WARN: Deleting the agent %s due to Manager termination' % agent.name())
                 # We don't need to wait until delete will be completed
                 thread = threading.Thread(target=providers.deleteInstance, args=(agent._id,))
                 thread.daemon = True
@@ -150,12 +150,13 @@ class Manager(providers.Manager, TaskExecutorBase):
         '''Get agent worker object'''
         with self._agents_pool_lock:
             for agent in self._agents_pool:
-                if agent_name == agent._name:
+                if agent_name == agent.name():
                     return agent
         return None
 
     def resourcesGet(self, quick_check = False):
         '''Run the delayed check and return the cached value'''
+
         with self._check_resources_timer_lock:
             if quick_check and self._check_resources_timer:
                 self._check_resources_timer.cancel()
@@ -164,15 +165,27 @@ class Manager(providers.Manager, TaskExecutorBase):
                 self._check_resources_timer = threading.Timer(0.1 if quick_check else 3, self.resourcesGetWait)
                 self._check_resources_timer.start()
 
+        # Get the info from pool
+        agents_pool = {}
+        with self._agents_pool_lock:
+            for agent in self._agents_pool:
+                agents_pool[agent.name()] = {
+                    'name': agent.name(),
+                    'active': agent.isActive(),
+                    # TODO: add 'error' flag/message here if it's happened
+                }
+                if agent._id:
+                    agents_pool[agent.name()]['id'] = agent._id
+
+        # Modify the provider resources to add more info for the Agents
         with self._resources_lock:
-            # Modify the provider resources to add more info for the Agents
-            out = {'manager': self._resources.get('manager'), 'agents': {}}
-            for name, info in self._resources.get('agents', {}).items():
-                out['agents'][name] = info.copy()
-                agent = self.agentGet(name)
-                if agent:
-                    out['agents'][name]['active'] = agent.isActive()
-                    # TODO: add error flag/message here if it's happened
+            out = {'manager': self._resources.get('manager', {}), 'agents': agents_pool}
+            for inst_id, info in self._resources.get('agents', {}).items():
+                # Find name with the specified ID
+                for name in out['agents']:
+                    if out['agents'][name].get('id') == inst_id:
+                        out['agents'][name].update(info)
+                        break
             return out
 
     def resourcesGetWait(self):

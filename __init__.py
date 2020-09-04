@@ -697,10 +697,50 @@ class TASKS_UL_list(bpy.types.UIList):
         elif self.layout_type in {'GRID'}:
             pass
 
-class BlendNetGetLogOperation(bpy.types.Operator):
-    bl_idname = 'blendnet.getlog'
-    bl_label = 'Get Log'
-    bl_description = 'Show the Manager or Agent log data'
+class BlendNetGetNodeLogOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.getnodelog'
+    bl_label = 'Get Node Log'
+    bl_description = 'Show the node (instance) log data'
+
+    node_id: StringProperty(
+        name = 'Node ID',
+        description = 'ID of the node/instance to get the log',
+        default = ''
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        data = BlendNet.addon.getNodeLog(self.node_id)
+        if not data:
+            self.report({'WARNING'}, 'No log data retreived for ' + self.node_id)
+            return {'CANCELLED'}
+        if data == 'NOT IMPLEMENTED':
+            self.report({'WARNING'}, 'Not implemented for the current provider')
+            return {'CANCELLED'}
+        prefix = self.node_id
+
+        def drawPopup(self, context):
+            layout = self.layout
+
+            if BlendNet.addon.showLogWindow(prefix, data):
+                layout.label(text='''Don't forget to unlink the file if you '''
+                                  '''don't want it to stay in blend file.''')
+            else:
+                layout.label(text='Unable to show the log window', icon='ERROR')
+
+        wm.popup_menu(drawPopup, title='Log for manager', icon='INFO')
+
+        return {'FINISHED'}
+
+class BlendNetGetServiceLogOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.getservicelog'
+    bl_label = 'Get Service Log'
+    bl_description = 'Show the service (daemon) log data'
 
     agent_name: StringProperty(
         name = 'Name of Agent',
@@ -715,51 +755,39 @@ class BlendNetGetLogOperation(bpy.types.Operator):
     def invoke(self, context, event):
         wm = context.window_manager
 
-        data = {}
+        out = {}
         if self.agent_name:
-            data = BlendNet.addon.agentGetLog(self.agent_name)
+            out = BlendNet.addon.agentGetLog(self.agent_name)
         else:
-            data = BlendNet.addon.managerGetLog()
+            out = BlendNet.addon.managerGetLog()
 
         prefix = self.agent_name if self.agent_name else BlendNet.addon.getResources(context).get('manager', {}).get('name')
 
-        if not data:
+        if not out:
             self.report({'ERROR'}, 'No log data retreived for ' + prefix)
             return {'CANCELLED'}
+
+        data = []
+        line = ''
+        for t, l in out.items():
+            if not l.endswith('\n'):
+                line += l
+                continue
+            time_str = datetime.fromtimestamp(round(float(t), 3)).strftime('%y.%m.%d %H:%M:%S.%f')
+            data.append(time_str + '\t' + line + l)
+            line = ''
+        if line:
+            data.append('{not completed line}\t' + line)
+
+        data = ''.join(data)
 
         def drawPopup(self, context):
             layout = self.layout
 
-            log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8',
-                    prefix=prefix + '_' + datetime.now().strftime('%y%m%d-%H%M%S_'),
-                    suffix='.log')
-            line = ''
-            for t, l in data.items():
-                if not l.endswith('\n'):
-                    line += l
-                    continue
-                time_str = datetime.fromtimestamp(round(float(t), 3)).strftime('%y.%m.%d %H:%M:%S.%f')
-                log_file.write(time_str + '\t' + line + l)
-                line = ''
-            if line:
-                log_file.write('{not completed line}\t' + line)
-
-            log_file.flush()
-
-            bpy.ops.text.open(filepath=log_file.name, internal=True)
-
-            # Opening new window to show the log
-            bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
-            area = bpy.context.window_manager.windows[-1].screen.areas[0]
-            if area.type == 'PREFERENCES':
-                area.type = 'TEXT_EDITOR'
-                area.spaces[0].show_line_numbers = False
-                area.spaces[0].show_syntax_highlight = False
-                area.spaces[0].text = bpy.data.texts[os.path.basename(log_file.name)]
+            if BlendNet.addon.showLogWindow(prefix, data):
                 layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
             else:
-                layout.label(text='Ok, open Blender text editor and find "%s".' % (os.path.basename(log_file.name),))
-                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+                layout.label(text='Unable to show the log window', icon='ERROR')
 
         wm.popup_menu(drawPopup, title='Log for manager', icon='INFO')
 
@@ -996,7 +1024,7 @@ class BlendNetTaskRemoveOperation(bpy.types.Operator):
 class BlendNetAgentRemoveOperation(bpy.types.Operator):
     bl_idname = 'blendnet.agentremove'
     bl_label = 'Remove the agent'
-    bl_description = 'Remove the agent from the agents pool'
+    bl_description = 'Remove the agent from the agents pool or terminate in case of cloud provider'
     bl_options = {'REGISTER', 'INTERNAL'}
 
     agent_name: StringProperty()
@@ -1011,11 +1039,17 @@ class BlendNetAgentRemoveOperation(bpy.types.Operator):
 
     def execute(self, context):
         self.report({'INFO'}, 'Removing agent "%s"' % self.agent_name)
-        if not BlendNet.addon.managerAgentRemove(self.agent_name):
-            self.report({'WARNING'}, 'Unable to remove agent "%s"' % (self.agent_name,))
-            return {'PASS_THROUGH'}
 
-        self.report({'INFO'}, 'Removed agent "%s"' % (self.agent_name,))
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        if prefs.resource_provider == 'local':
+            if not BlendNet.addon.managerAgentRemove(self.agent_name):
+                self.report({'WARNING'}, 'Unable to remove agent "%s"' % (self.agent_name,))
+                return {'CANCELLED'}
+
+            self.report({'INFO'}, 'Removed agent "%s"' % (self.agent_name,))
+        else:
+            BlendNet.addon.destroyAgent(self.agent_name)
+            self.report({'INFO'}, 'BlendNet destroy Agent instance ' + self.agent_name)
 
         return {'FINISHED'}
 
@@ -1244,11 +1278,19 @@ class BlendNetManagerPanel(bpy.types.Panel):
             split = layout.split(factor=0.3)
             split.label(text='Address')
             split.label(text='%s:%s' % (prefs.manager_address, prefs.manager_port))
-        row = layout.row()
-        row.operator('blendnet.getlog', text='Get Manager Log', icon='TEXT').agent_name = ''
-        row.enabled = BlendNet.addon.isManagerActive()
 
+        row = layout.row()
         manager_info = BlendNet.addon.getResources(context).get('manager')
+
+        col = row.column()
+        col.enabled = BlendNet.addon.isManagerActive()
+        col.operator('blendnet.getservicelog', text='Service Log', icon='TEXT').agent_name = ''
+
+        col = row.column()
+        col.enabled = BlendNet.addon.isManagerStarted()
+        op = col.operator('blendnet.getnodelog', text='Node Log', icon='TEXT')
+        op.node_id = manager_info.get('id', '') if manager_info else ''
+
         if manager_info:
             layout.label(text='Manager instance:')
             box = layout.box()
@@ -1326,8 +1368,8 @@ class BlendNetAgentsPanel(bpy.types.Panel):
         agents = BlendNet.addon.getResources(context).get('agents', {})
         if agents:
             box = layout.box()
-            for inst_id in sorted(agents.keys()):
-                info = agents[inst_id]
+            for inst_name in sorted(agents.keys()):
+                info = agents[inst_name]
                 split = box.split(factor=0.8)
                 split.label(text=info.get('name'))
                 row = split.row()
@@ -1345,11 +1387,14 @@ class BlendNetAgentsPanel(bpy.types.Panel):
                 else:
                     row.label(icon='X') # Node is terminated or unknown state
 
-                col = row.column()
-                col.operator('blendnet.getlog', text='', icon='TEXT').agent_name = info.get('name')
-                col.enabled = bool(info.get('active'))
-                if prefs.resource_provider == 'local':
-                    row.operator('blendnet.agentremove', icon='TRASH', text='').agent_name = info.get('name')
+                row.enabled = bool(info.get('started') or info.get('stopped')) or prefs.resource_provider == 'local'
+                if info.get('active'):
+                    row.operator('blendnet.getservicelog', text='', icon='TEXT').agent_name = info.get('name', '')
+                else:
+                    col = row.column()
+                    col.operator('blendnet.getnodelog', text='', icon='TEXT').node_id = info.get('id', '')
+                    col.enabled = bool(info.get('started'))
+                row.operator('blendnet.agentremove', icon='TRASH', text='').agent_name = info.get('name', '')
 
 class BlendNetRenderEngine(bpy.types.RenderEngine):
     '''Continuous render engine allows to switch between the tasks'''
@@ -1516,7 +1561,8 @@ def register():
     bpy.utils.register_class(BlendNetAgentRemoveOperation)
     bpy.utils.register_class(BlendNetAgentCreateOperation)
     bpy.utils.register_class(BlendNetTaskMenu)
-    bpy.utils.register_class(BlendNetGetLogOperation)
+    bpy.utils.register_class(BlendNetGetServiceLogOperation)
+    bpy.utils.register_class(BlendNetGetNodeLogOperation)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
     bpy.utils.register_class(BlendNetDestroyManager)
@@ -1529,7 +1575,8 @@ def unregister():
     bpy.utils.unregister_class(BlendNetToggleManager)
     bpy.utils.unregister_class(BlendNetDestroyManager)
     bpy.utils.unregister_class(BlendNetRenderPanel)
-    bpy.utils.unregister_class(BlendNetGetLogOperation)
+    bpy.utils.unregister_class(BlendNetGetNodeLogOperation)
+    bpy.utils.unregister_class(BlendNetGetServiceLogOperation)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)
     bpy.utils.unregister_class(BlendNetAgentCreateOperation)
