@@ -98,14 +98,16 @@ class Commands:
         scene.render.image_settings.color_depth = '32'
         scene.render.image_settings.exr_codec = 'DWAA'
         bpy.data.images['Render Result'].save_render('_preview.exr')
-        os.rename('_preview.exr', 'preview.exr')
-
-    def saveRender(cls = None):
         scene.render.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
         scene.render.image_settings.color_mode = 'RGBA'
         scene.render.image_settings.color_depth = '32'
         scene.render.image_settings.exr_codec = 'ZIP'
-        bpy.data.images['Render Result'].save_render('_render.exr')
+        os.rename('_preview.exr', 'preview.exr')
+
+    def saveRender(cls = None):
+        # Due to the bug it's not working properly: https://developer.blender.org/T71087
+        # Basically when multilayer exr is selected - it's saved as a regular one layer
+        # exr, so switched to `write_still` in executing the render command
         os.rename('_render.exr', 'render.exr')
 
 def executeCommand(name):
@@ -132,7 +134,12 @@ input_thread.start()
 eprint('INFO: Starting render process')
 
 # Start the render process
-bpy.ops.render.render()
+scene.render.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
+scene.render.image_settings.color_mode = 'RGBA'
+scene.render.image_settings.color_depth = '32'
+scene.render.image_settings.exr_codec = 'ZIP'
+scene.render.filepath = '_render.exr'
+bpy.ops.render.render(write_still=True)
 
 eprint('INFO: Render process completed')
 
