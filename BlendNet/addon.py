@@ -331,7 +331,7 @@ def updateManagerTasks():
                 print('INFO: Downloading the final render for %s...' % task_name)
                 item.received = 'Downloading...'
             else:
-                item.received = out_file
+                item.received = result
 
     manager_tasks_cache = tasks
 
@@ -521,8 +521,8 @@ def managerDownloadTaskResult(task_name, result_to_download):
 
         manager_task_download_workers.add(task_name, result_to_download, out_file)
         manager_task_download_workers.start()
-        return False
-    return True
+        return None
+    return out_file
 
 def managerTaskConfig(task, conf):
     return ManagerClient(getManagerIP(), getConfig()).taskConfigPut(task, conf)
