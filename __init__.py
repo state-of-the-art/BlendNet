@@ -1504,9 +1504,15 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
             if update_render:
                 result = self.begin_result(0, 0, self.size_x, self.size_y)
                 if os.path.isfile(update_render):
-                    result.layers[0].load_from_file(update_render)
+                    try:
+                        result.layers[0].load_from_file(update_render)
+                        print('DEBUG: Loaded preview layer:', update_render)
+                    except Exception as e:
+                        print('DEBUG: Unable to load the preview layer:', e)
+                        result.load_from_file(update_render)
+                        print('DEBUG: Loaded render result file:', update_render)
                 else:
-                    print('ERROR: Unable to load not existing result file "%s"' % update_render)
+                    print('ERROR: Unable to load not existing result file "%s"' % (update_render,))
                 self.end_result(result)
                 self.update_result(result)
 
