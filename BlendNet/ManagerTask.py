@@ -21,6 +21,11 @@ class ManagerTaskConfig(TaskConfig):
             'min': 0,
             'default': lambda cfg: cfg._parent._parent._cfg.agents_max,
         }
+        self._defs['use_compositing_nodes'] = {
+            'description': '''Use compositing nodes from the project''',
+            'type': bool,
+            'default': True,
+        }
 
         super().__init__(parent)
 
@@ -35,7 +40,7 @@ class ManagerTask(TaskBase):
                 'samples_acquired': self._status.get('samples_done', 0), # How much samples was taken to process by agents
                 'workloads_taken': self._status.get('workloads_taken', 0), # How much agent tasks was taken
                 'results_processing': self._status.get('results_processing'), # While results still processing task can't be completed
-                'compose_filename': self._status.get('compose_filename'), # Blob ID of the composed image
+                'compose_filepath': self._status.get('compose_filepath'), # Composed image filepath to store the image on the Addon
             })
             self._status['result']['compose'] = self._status['result'].get('compose', None) # Blob ID of the composed image
 
@@ -99,15 +104,19 @@ class ManagerTask(TaskBase):
             # Lastly check if it's time for compositing
             with self._status_lock:
                 if (not self._status['result']['compose']
-                    and self._status['samples_done'] >= self._cfg.samples):
+                    and self._status['samples_done'] >= self._cfg.samples
+                    and not self._stop_task):
                     to_compose = True
 
-            if not to_merge and not to_compose:
-                self.statusResultsProcessingSet(False)
+            if not to_merge:
+                if not to_compose:
+                    self.statusResultsProcessingSet(False)
                 if not self.isRunning():
+                    self.statusResultsProcessingSet(False)
                     break # If all the requests was processed and task is not running - stop
-                time.sleep(1.0)
-                continue
+                if not to_compose:
+                    time.sleep(1.0)
+                    continue
 
             self.statusResultsProcessingSet(True)
 
@@ -121,6 +130,7 @@ class ManagerTask(TaskBase):
 
     def _mergeWorker(self, to_merge):
         '''Merge the multiple preview or render images to one'''
+        print('DEBUG: Merge started for task "%s"' % (self.name(),))
         try:
             if len(to_merge[1]) == 1:
                 # Sending directly to results just one image to merge
@@ -134,10 +144,10 @@ class ManagerTask(TaskBase):
                 with self.prepareWorkspace(files) as ws_path:
                     process = self.runBlenderScriptProcessor(ws_path, 'merge', cfg)
                     outs, errs = process.communicate()
-                    if process.returncode != 0:
+                    if process.returncode != 0 or errs:
                         print('WARN: The merge process seems not ended well:')
-                        print('WARN: Composite outputs:', outs.decode())
-                        print('WARN: Composite errors:', errs.decode())
+                        print('WARN: Merge outputs:', outs.decode())
+                        print('WARN: Merge errors:', errs.decode())
                     blob = self._parent._fc.blobStoreFile(os.path.join(ws_path, cfg['result']), True)
                     if not blob:
                         print('ERROR: Unable to store blob for merge result of "%s"' % self.name())
@@ -145,6 +155,11 @@ class ManagerTask(TaskBase):
                     to_merge[0](blob['id'])
         except Exception as e:
             print('ERROR: Exception occurred during merging the results for task "%s": %s' % (self.name(), e))
+            # Critical only on render merge
+            if to_merge[0] == self.statusRenderSet:
+                self.stateError({self.name(): 'Exception occurred during merging the results: %s' % (e,)})
+
+        print('DEBUG: Merge completed for task "%s"' % (self.name(),))
 
         # Clean the old result blobs
         with self._results_to_remove_lock:
@@ -155,36 +170,60 @@ class ManagerTask(TaskBase):
                 self._parent._fc.blobRemove(blob_id)
             self._results_to_remove.clear()
 
+        print('DEBUG: Merge clean completed for task "%s"' % (self.name(),))
+
     def _composeWorker(self):
         '''Running blender instance to compose and export the rendered image'''
-        print('DEBUG: Starting composite process')
+        print('DEBUG: Starting composite process for task "%s"' % (self.name(),))
         try:
             with self._status_lock:
-                files = {
-                    self._cfg.project: self.fileGet(self._cfg.project),
-                    'render.exr': self._status['result']['render'],
-                }
+                # Composition can use dependencies - so getting them all to the workspace
+                files = self.filesGet()
+                # And updating deps with the rendered image to replace the renderl layer node
+                render_name = 'blendnet-' + self._status['result']['render']
+                files.update({
+                    render_name + '.exr': self._status['result']['render'],
+                })
             cfg = {
                 'project': self._cfg.project,
-                'render_file_path': '//render.exr',
-                'result_dir': 'compose-result',
+                'use_compositing_nodes': self._cfg.use_compositing_nodes,
+                'frame': self._cfg.frame,
+                'render_file_path': render_name + '.exr',
+                'result_dir': render_name + '-result',
             }
             with self.prepareWorkspace(files) as ws_path:
                 process = self.runBlenderScriptProcessor(ws_path, 'compose', cfg)
                 outs, errs = process.communicate()
-                if process.returncode != 0:
+                if process.returncode != 0 or errs:
                     print('WARN: The compose process seems not ended well:')
                     print('WARN: Composite outputs:', outs.decode())
                     print('WARN: Composite errors:', errs.decode())
+
+                # Find the compose filepath in the stdout
+                compose_filepath = None
+                for line in outs.decode().split('\n'):
+                    line = line.strip()
+                    if line.startswith('INFO: Compose filepath: '):
+                        compose_filepath = line.split('INFO: Compose filepath: ', 1)[-1]
+                        break
+
+                # Checking the result_dir and set the compose if the result file is here
                 for filename in os.listdir(os.path.join(ws_path, cfg['result_dir'])):
                     blob = self._parent._fc.blobStoreFile(os.path.join(ws_path, cfg['result_dir'], filename), True)
                     if not blob:
                         print('ERROR: Unable to store blob for compose result of "%s"' % self.name())
                         return
-                    self.statusComposeSet(blob['id'], filename)
+                    self.statusComposeSet(blob['id'], compose_filepath or filename)
                     break
+                with self._status_lock:
+                    if not self._status['result']['compose']:
+                        self.stateError({self.name(): 'Result file of the compose operation not found'})
+
         except Exception as e:
             print('ERROR: Exception occurred during composing the result for task "%s": %s' % (self.name(), e))
+            self.stateError({self.name(): 'Exception occurred during composing the result: %s' % (e,)})
+
+        print('DEBUG: Compositing completed for task "%s"' % (self.name(),))
 
     def calculateWorkloadSamples(self, samples, agents):
         '''Calculating optimal number of samples per agent'''
@@ -416,10 +455,10 @@ class ManagerTask(TaskBase):
         with self._execution_lock:
             self._execution_watcher = None
 
-    def statusComposeSet(self, blob_id, filename):
+    def statusComposeSet(self, blob_id, filepath):
         with self._status_lock:
+            self._status['compose_filepath'] = filepath
             self._status['result']['compose'] = blob_id
-            self._status['compose_filename'] = filename
 
     def _stop(self):
         self._stop_task = True
