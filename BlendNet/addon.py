@@ -307,6 +307,7 @@ def updateManagerTasks():
         item = tasks_prop.add()
         item.name = tasks[name].get('name')
 
+    to_download = {}
     for i, item in enumerate(tasks_prop):
         task_name = item.name
         if task_name in to_rem:
@@ -324,14 +325,27 @@ def updateManagerTasks():
             done = task.get('done')
             item.done = ('%.2f%%' % (done*100)) if done > 0.01 else ''
 
-        if not item.received and task_name.startswith(getTaskProjectPrefix()) and task.get('state') == 'COMPLETED':
-            # TODO: make possible to use ### in the out path to save result using frame number
-            result = managerDownloadTaskResult(task_name, 'render')
-            if not result:
-                print('INFO: Downloading the final render for %s...' % task_name)
-                item.received = 'Downloading...'
-            else:
-                item.received = result
+        if task_name.startswith(getTaskProjectPrefix()) and task.get('state') == 'COMPLETED':
+            # Download only latest tasks frames, we don't need old ones here
+            key = str(task.get('frame'))
+            if key not in to_download:
+                to_download[key] = item
+            if to_download[key].create_time < item.create_time:
+                # Mark the previous as skipped
+                to_download[key].received = 'skipped'
+                to_download[key] = item
+            elif to_download[key].create_time > item.create_time:
+                item.received = 'skipped'
+
+    for item in to_download.values():
+        if item.received:
+            continue
+        result = managerDownloadTaskResult(task_name, 'compose')
+        if not result:
+            print('INFO: Downloading the final render for %s...' % task_name)
+            item.received = 'Downloading...'
+        else:
+            item.received = result
 
     manager_tasks_cache = tasks
 
@@ -480,34 +494,44 @@ def _managerDownloadTaskResultsWorker(task, result, file_path):
         ret = managerTaskResultDownload(task, result, file_path)
         if ret:
             break
-        print('WARN: Downloading of "%s" from task "%s" failed, repeating (%s)...' % (result, task, repeat))
+        print('WARN: Downloading of "%s" from task "%s" into "%s" failed, repeating (%s)...' % (
+            result, task, file_path, repeat
+        ))
         time.sleep(1.0)
     if ret:
-        print('DEBUG: Downloading of "%s" from task "%s" completed' % (result, task))
-        # Set the downloaded file path to the item received field
+        print('DEBUG: Downloading of "%s" from task "%s" into "%s" completed' % (result, task, file_path))
     else:
-        file_path = 'Download error: %s' % ret
+        print('ERROR: Download error: %s' % (ret,))
+    # Set the downloaded file path to the item received field
     for item in bpy.context.window_manager.blendnet.manager_tasks:
-        if item.name == task:
+        if item.name == task and result == 'compose' and item.received != 'skipped':
             item.received = file_path
 
-def managerDownloadTaskResult(task_name, result_to_download):
+def managerDownloadTaskResult(task_name, result_to_download, tempdir = None):
     '''Check the result existance and download if it's not matching the existing one'''
-    # TODO: make possible to use ### in the out path to save result using frame number
-    out_path = bpy.path.abspath(bpy.context.scene.render.filepath)
-    out_file = os.path.join(out_path, '%s.exr' % task_name)
+    out_dir = os.path.dirname(bpy.path.abspath(bpy.context.scene.render.filepath))
+    out_path = os.path.join(out_dir, result_to_download, task_name + '.exr')
+    if result_to_download == 'compose':
+        compose_filepath = managerTaskStatus(task_name).get('compose_filepath')
+        out_path = bpy.path.abspath(compose_filepath)
+    if not os.path.isabs(out_path):
+        out_path = os.path.abspath(out_path)
+    if tempdir:
+        # Download to temp folder just to preview the task result
+        out_path = os.path.join(tempdir, task_name + os.path.splitext(out_path)[-1])
+
     result = True
     checksum = None
     # Check the local file first - maybe it's the thing we need
-    if os.path.isfile(out_file):
+    if os.path.isfile(out_path):
         # Calculate sha1 to make sure it's the same file
         sha1_calc = hashlib.sha1()
-        with open(out_file, 'rb') as f:
+        with open(out_path, 'rb') as f:
             for chunk in iter(lambda: f.read(1048576), b''):
                 sha1_calc.update(chunk)
         checksum = sha1_calc.hexdigest()
         # If file and checksum are here - we need to get the actual task status to compare
-        result = managerTaskStatus(task_name).get('result', {}).get('render')
+        result = managerTaskStatus(task_name).get('result', {}).get(result_to_download)
 
     # If file is not working for us - than download
     if checksum != result:
@@ -519,10 +543,10 @@ def managerDownloadTaskResult(task_name, result_to_download):
                 _managerDownloadTaskResultsWorker,
             )
 
-        manager_task_download_workers.add(task_name, result_to_download, out_file)
+        manager_task_download_workers.add(task_name, result_to_download, out_path)
         manager_task_download_workers.start()
         return None
-    return out_file
+    return out_path
 
 def managerTaskConfig(task, conf):
     return ManagerClient(getManagerIP(), getConfig()).taskConfigPut(task, conf)
