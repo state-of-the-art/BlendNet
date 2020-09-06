@@ -130,6 +130,7 @@ class TaskBase(ABC):
             'start_time': self._start_time,
             'end_time': self._end_time,
             'state': self._state.name,
+            'frame': self._cfg.frame,
             'done': self._status['samples_done'] / self._cfg.samples,
         }
         if self._state_error_info:
@@ -144,7 +145,6 @@ class TaskBase(ABC):
                 'project': self._cfg.project,
                 'samples': self._cfg.samples,
                 'seed': self._cfg.seed,
-                'frame': self._cfg.frame,
             })
             out.update(self._status)
             return out
