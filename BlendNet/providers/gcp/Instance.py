@@ -13,8 +13,8 @@ from . import METADATA_URL, METADATA_HEADER
 from .. import InstanceProvider
 
 class Instance(InstanceProvider):
-    def __init__(self, conf):
-        InstanceProvider.__init__(self, conf)
+    def __init__(self):
+        InstanceProvider.__init__(self)
 
         self._terminatingWatchersReset()
 
