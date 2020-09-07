@@ -84,10 +84,9 @@ class ManagerConfig(TaskExecutorConfig):
 
         super().__init__(parent, init)
 
-class Manager(providers.Manager, TaskExecutorBase):
+class Manager(TaskExecutorBase, providers.Manager):
     def __init__(self, conf):
         print('DEBUG: Creating Manager instance')
-        providers.Manager.__init__(self, conf)
         TaskExecutorBase.__init__(self, ManagerTask, ManagerConfig(self, conf))
 
         self._agents_pool_lock = threading.Lock()
@@ -100,7 +99,10 @@ class Manager(providers.Manager, TaskExecutorBase):
         self._check_resources_timer = None
         self.resourcesGet(True)
 
+        providers.Manager.__init__(self)
+
         self.tasksLoad()
+        print('DEBUG: Created Manager instance')
 
     def setTerminating(self):
         '''Overrides setTerminating function to run save tasks'''
@@ -180,10 +182,9 @@ class Manager(providers.Manager, TaskExecutorBase):
         # Modify the provider resources to add more info for the Agents
         with self._resources_lock:
             out = {'manager': self._resources.get('manager', {}), 'agents': agents_pool}
-            for inst_id, info in self._resources.get('agents', {}).items():
-                # Find name with the specified ID
+            for inst_name, info in self._resources.get('agents', {}).items():
                 for name in out['agents']:
-                    if out['agents'][name].get('id') == inst_id:
+                    if name == inst_name:
                         out['agents'][name].update(info)
                         break
             return out
