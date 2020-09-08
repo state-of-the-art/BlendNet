@@ -923,8 +923,10 @@ class BlendNetTaskRunOperation(bpy.types.Operator):
 
 class BlendNetTaskDownloadOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskdownload'
-    bl_label = 'Download task render'
-    bl_description = 'Download the completed task render'
+    bl_label = 'Download task result'
+    bl_description = 'Download the completed task result'
+
+    result: StringProperty()
 
     @classmethod
     def poll(cls, context):
@@ -932,13 +934,17 @@ class BlendNetTaskDownloadOperation(bpy.types.Operator):
         if len(bn.manager_tasks) <= bn.manager_tasks_idx:
             return False
         task_state = bn.manager_tasks[bn.manager_tasks_idx].state
-        return task_state in {'COMPLETED'}
+        # Allow to download results even for error state
+        return task_state in {'COMPLETED', 'ERROR'}
 
     def invoke(self, context, event):
         wm = context.window_manager
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-        result = BlendNet.addon.managerDownloadTaskResult(task_name, 'compose')
+        result = BlendNet.addon.managerDownloadTaskResult(task_name, self.result)
+        if result is None:
+            self.report({'WARNING'}, 'Unable to download the final result for %s, please retry later ' % (task_name,))
+            return {'CANCELLED'}
         if not result:
             self.report({'INFO'}, 'Downloading the final result for %s... ' % (task_name,))
             return {'FINISHED'}
@@ -1186,7 +1192,8 @@ class BlendNetTaskMenu(bpy.types.Menu):
         layout.operator('blendnet.taskinfo', icon='INFO')
         layout.operator('blendnet.taskmessages', icon='TEXT')
         layout.operator('blendnet.taskdetails', icon='TEXT')
-        layout.operator('blendnet.taskdownload', icon='DOWNARROW_HLT')
+        layout.operator('blendnet.taskdownload', text='Download render', icon='DOWNARROW_HLT').result = 'render'
+        layout.operator('blendnet.taskdownload', text='Download compose', icon='DOWNARROW_HLT').result = 'compose'
         layout.operator('blendnet.taskrun', icon='PLAY')
         layout.operator('blendnet.taskremove', icon='TRASH')
         layout.operator('blendnet.taskstop', icon='PAUSE')

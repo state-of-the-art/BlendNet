@@ -120,21 +120,21 @@ class TaskExecutorBase(ABC):
 
     def tasksSave(self, tasks = []):
         '''Save in-memory tasks to disk'''
-        with self._tasks_lock:
-            if not tasks:
+        if not tasks:
+            with self._tasks_lock:
                 tasks = list(self._tasks.values())
 
-            print('DEBUG: Saving %s tasks to disk' % len(tasks))
+        print('DEBUG: Saving %s tasks to disk' % len(tasks))
 
-            os.makedirs(self._tasks_dir, 0o700, True)
+        os.makedirs(self._tasks_dir, 0o700, True)
 
-            for task in tasks:
-                try:
-                    filename = 'task-%s.json' % hashlib.sha1(task.name().encode('utf-8')).hexdigest()
-                    with open(os.path.join(self._tasks_dir, filename), 'w') as f:
-                        json.dump(task.snapshot(), f)
-                except Exception as e:
-                    print('ERROR: Unable to save task "%s" to disk: %s' % (task.name(), e))
+        for task in tasks:
+            try:
+                filename = 'task-%s.json' % hashlib.sha1(task.name().encode('utf-8')).hexdigest()
+                with open(os.path.join(self._tasks_dir, filename), 'w') as f:
+                    json.dump(task.snapshot(), f)
+            except Exception as e:
+                print('ERROR: Unable to save task "%s" to disk: %s' % (task.name(), e))
 
     def tasksLoad(self):
         '''Load tasks from disk'''
@@ -146,6 +146,7 @@ class TaskExecutorBase(ABC):
                 for entry in it:
                     if not (entry.is_file() and entry.name.endswith('.json')):
                         continue
+                    print('DEBUG: Loading task:', entry.name)
                     json_path = os.path.join(self._tasks_dir, entry.name)
                     try:
                         with open(json_path, 'r') as f:

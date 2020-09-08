@@ -198,7 +198,7 @@ class TaskBase(ABC):
     def isEnded(self):
         '''If task was executed, but ended it's execution'''
         with self._state_lock:
-            return self._state in (TaskState.COMPLETED, TaskState.STOPPED)
+            return self._state in (TaskState.COMPLETED, TaskState.STOPPED, TaskState.ERROR)
 
     def stateCreated(self):
         with self._state_lock:
@@ -225,6 +225,7 @@ class TaskBase(ABC):
     def stateError(self, info):
         with self._state_lock:
             self._state_error_info.append(info)
+            self._end_time = int(time.time())
             self.stateSet(TaskState.ERROR)
 
     def stateSet(self, state):
@@ -261,7 +262,7 @@ class TaskBase(ABC):
                 print('WARN: Unable to run already started task')
                 return True
 
-            print('DEBUG: Starting task %s' % self.name())
+            print('DEBUG: Running task %s' % self.name())
 
         return self._parent.taskAddToPending(self)
 
@@ -351,29 +352,38 @@ class TaskBase(ABC):
         with self._files_lock:
             for path, sha1 in self._files.items():
                 if not self._parent._fc.blobGet(sha1):
-                    errors.append('Unable to find required file "%s" with id "%s" in file cache' % (path, sha1))
-        if errors:
-            self.stateError(errors)
+                    errors.append({self.name(): 'Unable to find required file "%s" with id "%s" in file cache' % (path, sha1)})
+        for err in errors:
+            self.stateError(err)
         return True
 
-    def prepareWorkspace(self, files_map = None):
+    def prepareWorkspace(self, files_map):
         '''Preparing workspace to process files'''
-        ws_dir = self._parent._fc.workspaceCreate(self.name(), files_map or self.filesGet())
+        ws_dir = self._parent._fc.workspaceCreate(self.name(), files_map)
         if not ws_dir:
             raise Exception('ERROR: Unable to prepare workspace to execute task')
 
         return ws_dir
 
-    def runBlenderScriptProcessor(self, workspace_path, script_suffix, cfg = None):
+    def runBlenderScriptProcessor(self, workspace_path, script_suffix, cfg, blendfile = None):
         '''Running blender in workspace with providing a script path'''
 
         config_name = 'config-%s.json' % script_suffix
         with open(os.path.join(workspace_path, config_name), 'w') as f:
-            json.dump(cfg or self.configsGet(), f)
+            json.dump(cfg, f)
 
         script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'script-%s.py' % script_suffix)
+        command = [sys.executable, '-b', '-noaudio', '-y']
+        if blendfile:
+            command.append(os.path.join(workspace_path, blendfile))
+        # Position of script is important - if it's after blend file,
+        # than it will be started after blend loading
+        command.append('-P')
+        command.append(script_path)
+        command.append('--')
+        command.append(config_name)
         return subprocess.Popen(
-            [sys.executable, '-b', '-noaudio', '-y', '-P', script_path, '--', config_name],
+            command,
             cwd = workspace_path,
             stdin = subprocess.PIPE, # To send commands to the process
             stdout = subprocess.PIPE, # To get the current status of executing

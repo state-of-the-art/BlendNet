@@ -19,12 +19,11 @@ task = None
 with open(sys.argv[-1], 'r') as f:
     task = json.load(f)
 
-import bpy
-
 exitcode = 0
 
-print('INFO: Loading project file "%s"' % (task.get('project'),))
-bpy.ops.wm.open_mainfile(filepath=task.get('project'))
+import bpy
+
+print("INFO: Preparing composing of:", bpy.data.filepath)
 
 scene = bpy.context.scene
 
@@ -33,7 +32,9 @@ if 'frame' in task:
     scene.frame_current = task['frame']
 
 print('INFO: Checking existance of the dependencies')
-blend_file.getDependencies()
+goods, bads = blend_file.getDependencies()
+print('DEBUG: Goods:', goods)
+print('DEBUG: Bads:', bads)
 
 if scene.render.is_movie_format:
     print('WARN: Unable to save still image to movie format, so use single-layer exr for compose')
@@ -58,14 +59,17 @@ filename = bpy.path.basename(scene.render.frame_path())
 scene.render.filepath = os.path.join(task.get('result_dir'), filename)
 os.makedirs(bpy.path.abspath(task.get('result_dir')), mode=0o750, exist_ok=True)
 
-bpy.ops.image.open(filepath=bpy.path.abspath(task.get('render_file_path')), use_sequence_detection=False)
+image_path = os.path.abspath(bpy.path.abspath(task.get('render_file_path')))
+print('DEBUG: Using render image:', image_path)
+bpy.ops.image.open(filepath=image_path, use_sequence_detection=False)
 image = bpy.data.images[bpy.path.basename(task.get('render_file_path'))]
 
 # If compositing is disabled - just convert the file to the required format
 if not task.get('use_compositing_nodes'):
+    print('DEBUG: Compositing is disabled, just converting the render image')
     if scene.render.image_settings.file_format == 'OPEN_EXR_MULTILAYER':
         print('WARN: Just move the render to compose due to blender bug T71087')
-        os.rename(bpy.path.abspath(task.get('render_file_path')), bpy.path.abspath(scene.render.frame_path()))
+        os.rename(image_path, bpy.path.abspath(scene.render.frame_path()))
         sys.exit(1)
 
     # Save the loaded image as render to convert
@@ -88,15 +92,19 @@ nodes_to_remove = []
 links_to_create = []
 # Find nodes, links and outpus
 for node in scene.node_tree.nodes:
+    print('DEBUG: Checking node %s' % (node,))
     if not isinstance(node, bpy.types.CompositorNodeRLayers) or node.scene != scene:
         continue
     nodes_to_remove.append(node)
     print('INFO: Reconnecting %s links to render image' % (node,))
     for link in scene.node_tree.links:
+        print('DEBUG:  Checking link %s - %s' % (link.from_node, link.to_node))
         if link.from_node != node:
             continue
+        print('DEBUG:  Found link %s - %s' % (link.from_socket, link.to_socket))
         link_name = link_name_overrides.get(link.from_socket.name, link.from_socket.name)
         for output in image_node.outputs:
+            print('DEBUG:   Checking output:', output.name, link_name)
             if output.name != link_name:
                 continue
             links_to_create.append((output, link))

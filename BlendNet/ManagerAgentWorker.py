@@ -34,7 +34,7 @@ class ManagerAgentWorker(object):
         if 'bucket' in self._cfg:
             SimpleREST.generateCert(self._name, self._name)
 
-        self._enabled = True
+        self._enabled = False
 
         self._state_lock = threading.Lock()
         self._state = ManagerAgentState.UNKNOWN
@@ -51,19 +51,36 @@ class ManagerAgentWorker(object):
 
         self._wait_agent_lock = threading.Lock()
 
-        self._tasks_watcher = threading.Thread(target=self._tasksWatcher)
-        self._tasks_watcher.start()
-
         self._download_render_lock = threading.Lock()
         self._download_render = {}
         self._download_preview_lock = threading.Lock()
         self._download_preview = {}
-        self._download_watcher = threading.Thread(target=self._downloadWatcher)
-        self._download_watcher.start()
+
+        self._tasks_watcher = None
+        self._download_watcher = None
+
+        self.start()
 
     def __del__(self):
         print('DEBUG: Deleting agent worker %s' % self._name)
         self.stop()
+
+    def start(self):
+        '''Starts the worker activity'''
+        self._enabled = True
+        if not self._tasks_watcher:
+            self._tasks_watcher = threading.Thread(target=self._tasksWatcher)
+            self._tasks_watcher.start()
+        if not self._download_watcher:
+            self._download_watcher = threading.Thread(target=self._downloadWatcher)
+            self._download_watcher.start()
+
+    def isStopped(self):
+        '''To be sure the worker is completed'''
+        return (not self._enabled
+                and not self._state_watcher
+                and not self._download_watcher
+                and not self._tasks_watcher)
 
     def stop(self):
         print('DEBUG: Stopping agent worker %s' % self._name)
@@ -104,6 +121,7 @@ class ManagerAgentWorker(object):
                 to_download[2](to_download[0], ret['id'])
 
         print('DEBUG: Stopped ManagerAgentWorker download watcher')
+        self._download_watcher = None
 
     def _tasksWatcher(self):
         '''Watch on the manager's running tasks if the current task is completed'''
@@ -149,7 +167,7 @@ class ManagerAgentWorker(object):
                 # Upload deps anyway - who knows, maybe agent was destroyed
                 # It will take not long time if files are already uploaded
                 if not self.uploadFiles(self._work['task_name'], current_task.filesGet()):
-                    current_task.stateError('Unable to upload the required files')
+                    current_task.stateError({self._work['task_name']: 'Unable to upload the required files'})
                     self.workEnded()
                     continue
                 self.sendWorkload(self._work['task_name'], self._work)
@@ -161,6 +179,7 @@ class ManagerAgentWorker(object):
 
             time.sleep(1.0)
         print('DEBUG: Stopped ManagerAgentWorker tasks watcher')
+        self._tasks_watcher = None
 
     def _activateStateWatcher(self):
         '''Will watch the agent state until it will be lower than STARTED'''
@@ -238,6 +257,11 @@ class ManagerAgentWorker(object):
 
     def _startAgent(self):
         '''Create and start the agent if it's needed'''
+        if self._parent.isTerminating():
+            # Protection to make sure the agent will not be started again on manager termination
+            self.stop()
+            return
+
         if self.state() in (ManagerAgentState.STOPPED, ManagerAgentState.DESTROYED):
             # Agent will need config files right after the start
             providers.uploadFileToBucket('%s.key' % self._name, self._cfg.get('bucket'), 'work_%s/server.key' % self._name)

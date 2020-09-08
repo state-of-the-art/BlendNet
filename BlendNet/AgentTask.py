@@ -29,6 +29,7 @@ class AgentTask(TaskBase):
 
         # Special thread to watch for stderr stream messages
         self._execution_stderr_watcher = None
+        print('DEBUG: Created Agent task', name)
 
     def statusStatisticsSet(self, statistics):
         with self._status_lock:
@@ -47,11 +48,16 @@ class AgentTask(TaskBase):
         print('DEBUG: Execution watcher of task "%s" is started' % self.name())
 
         try:
-            with self.prepareWorkspace() as ws_path:
-                process = self.runBlenderScriptProcessor(ws_path, 'render')
+            files_map = self.filesGet()
+            print('DEBUG: Files to use in workspace:')
+            for path in sorted(files_map):
+                print('DEBUG:  ', files_map[path], path)
+            with self.prepareWorkspace(files_map) as ws_path:
+                process = self.runBlenderScriptProcessor(ws_path, 'render', self.configsGet(), blendfile=self._cfg.project)
                 self._execution_stderr_watcher = threading.Thread(target=self._executionStderrWatcher, args=(process, ws_path))
                 self._execution_stderr_watcher.start()
                 self._watchBlenderScriptProcessor(process, ws_path)
+            print('DEBUG: Destroyed the workspace')
         except Exception as e:
             print('ERROR: Exception occurred during task "%s" execution: %s' % (self.name(), e))
         finally:
@@ -80,8 +86,12 @@ class AgentTask(TaskBase):
                 blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'preview.exr'))
                 self.statusPreviewSet(blob['id'] if blob else None)
             elif l.startswith('INFO: Command "saveRender" completed'):
-                blob = self._parent._fc.blobStoreFile(os.path.join(workspace, 'render.exr'), True)
+                file_path = os.path.join(workspace, 'render.exr')
+                blob = self._parent._fc.blobStoreFile(file_path, True)
+                if blob:
+                    print('DEBUG: got the render blob', blob['id'], blob['size'])
                 self.statusRenderSet(blob['id'] if blob else None)
+        self._execution_stderr_watcher = None
 
     def _watchBlenderScriptProcessor(self, process, workspace):
         '''Watching blender stdout and sending commands to the process'''
@@ -165,9 +175,9 @@ class AgentTask(TaskBase):
                     self.statusPrepareTimeSet(prepare_time)
 
                 # Update preview every 5 second
-                if curr_sample > 1 and time.time() > sample_preview_save_time + 5:
+                if curr_sample > 1 and curr_sample < self._cfg.samples and time.time() > sample_preview_save_time:
                     try:
-                        sample_preview_save_time = time.time()
+                        sample_preview_save_time = time.time() + 5
                         process.stdin.write(b'savePreview\n')
                         process.stdin.flush()
                     except Exception as e:
@@ -251,7 +261,7 @@ class AgentTask(TaskBase):
         print('DEBUG: Return code: %s' % process.poll())
 
         if process.poll() == -9: # OOM kill
-            self.stateError('The worker was killed by Out Of Memory - try to use bigger VM for the task')
+            self.stateError({self.name(): 'The worker was killed by Out Of Memory - try to use bigger VM for the Agent'})
 
         if finished:
             self.stateComplete()
