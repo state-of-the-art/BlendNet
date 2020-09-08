@@ -18,6 +18,8 @@ task = None
 with open(sys.argv[-1], 'r') as f:
     task = json.load(f)
 
+print('DEBUG: Merging results:', task.get('images'))
+
 import _cycles
 _cycles.merge(
     input = task.get('images', []),

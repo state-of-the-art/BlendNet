@@ -61,7 +61,7 @@ def getCaches():
                 if not (localdir / cachedir).is_dir():
                     print('ERROR: Not a relative/not existing path of the cachedir '
                           '"%s" for object modifier %s --> %s' % (mod.domain_settings.cache_directory, o.name, mod.name))
-                    bad.add(mod.domain_settings.filepath)
+                    bad.add(cachedir)
                     continue
 
                 mod.domain_settings.cache_directory = '//' + cachedir.as_posix()
@@ -137,7 +137,7 @@ def getCaches():
                 for f in files_additional:
                     cpath = f.relative_to(localdir)
                     if cpath.as_posix() not in files:
-                        print('INFO: Found an additional fluid cache file to upload: %s' % (cpath.as_posix(),))
+                        print('INFO: Found an additional fluid cache file: %s' % (cpath.as_posix(),))
                         good.add(cpath.as_posix())
 
                 continue

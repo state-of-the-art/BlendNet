@@ -60,6 +60,7 @@ class ManagerTask(TaskBase):
         self._results_to_remove = set()
 
         self._stop_task = False # Used to stop the task
+        print('DEBUG: Created Manager task', name)
 
     def snapshot(self):
         '''Returns dict with all the data about task to restore it later'''
@@ -80,33 +81,38 @@ class ManagerTask(TaskBase):
         print('DEBUG: Starting ManagerTask "%s" results watcher' % self.name())
 
         prev_preview = set()
-        prev_render = set()
 
         while True:
             to_merge = None
             to_compose = None
 
-            # Preview merge in priority
+            # Preview merge in priority, it's merged often to provide quick updates for Addon
             with self._results_preview_lock:
                 blobs = set(self._results_preview.values())
                 if blobs != prev_preview:
                     to_merge = (self.statusPreviewSet, blobs)
                     prev_preview = blobs.copy()
 
-            # Next check to merge render results
+            # Next check to merge render results, executed once when all the samples are ready
             if not to_merge:
-                with self._results_render_lock:
-                    blobs = set(self._results_render.values())
-                    if blobs != prev_render:
-                        to_merge = (self.statusRenderSet, blobs)
-                        prev_render = blobs.copy()
-
-            # Lastly check if it's time for compositing
-            with self._status_lock:
-                if (not self._status['result']['compose']
-                    and self._status['samples_done'] >= self._cfg.samples
+                to_render = False
+                if (not self._status['result']['render']
+                    and self.isRenderComplete()
                     and not self._stop_task):
-                    to_compose = True
+                    to_render = True
+                if to_render:
+                    with self._results_render_lock:
+                        to_merge = (self.statusRenderSet, set(self._results_render.values()))
+                    print('INFO: Merging %s render results for task "%s"' % (len(to_merge[1]), self.name()))
+                    print('DEBUG: Blobs to merge:', to_merge[1])
+
+            # Lastly check if it's time for compositing, executed once when render is completed
+            if not to_merge:
+                with self._status_lock:
+                    if (not self._status['result']['compose']
+                        and self._status['result']['render']
+                        and not self._stop_task):
+                        to_compose = True
 
             if not to_merge:
                 if not to_compose:
@@ -136,22 +142,20 @@ class ManagerTask(TaskBase):
                 # Sending directly to results just one image to merge
                 to_merge[0](to_merge[1].pop())
             else:
-                files = dict([ ('%d.exr' % i, v) for i, v in enumerate(to_merge[1]) ])
+                files = dict([ (blob + '.exr', blob) for blob in to_merge[1] ])
                 cfg = {
                     'images': list(files.keys()),
                     'result': 'result.exr',
                 }
                 with self.prepareWorkspace(files) as ws_path:
                     process = self.runBlenderScriptProcessor(ws_path, 'merge', cfg)
-                    outs, errs = process.communicate()
-                    if process.returncode != 0 or errs:
-                        print('WARN: The merge process seems not ended well:')
-                        print('WARN: Merge outputs:', outs.decode())
-                        print('WARN: Merge errors:', errs.decode())
+                    self._processOutputs(process, show_out=(to_merge[0] == self.statusRenderSet))
+
                     blob = self._parent._fc.blobStoreFile(os.path.join(ws_path, cfg['result']), True)
                     if not blob:
                         print('ERROR: Unable to store blob for merge result of "%s"' % self.name())
                         return
+                    print('DEBUG: Merge result:', blob['id'], blob['size'])
                     to_merge[0](blob['id'])
         except Exception as e:
             print('ERROR: Exception occurred during merging the results for task "%s": %s' % (self.name(), e))
@@ -178,26 +182,24 @@ class ManagerTask(TaskBase):
         try:
             with self._status_lock:
                 # Composition can use dependencies - so getting them all to the workspace
-                files = self.filesGet()
+                files_map = self.filesGet()
                 # And updating deps with the rendered image to replace the renderl layer node
-                render_name = 'blendnet-' + self._status['result']['render']
-                files.update({
+                render_name = 'blendnet-' + self._status['result']['render'][:6]
+                files_map.update({
                     render_name + '.exr': self._status['result']['render'],
                 })
             cfg = {
-                'project': self._cfg.project,
                 'use_compositing_nodes': self._cfg.use_compositing_nodes,
                 'frame': self._cfg.frame,
                 'render_file_path': render_name + '.exr',
                 'result_dir': render_name + '-result',
             }
-            with self.prepareWorkspace(files) as ws_path:
-                process = self.runBlenderScriptProcessor(ws_path, 'compose', cfg)
-                outs, errs = process.communicate()
-                if process.returncode != 0 or errs:
-                    print('WARN: The compose process seems not ended well:')
-                    print('WARN: Composite outputs:', outs.decode())
-                    print('WARN: Composite errors:', errs.decode())
+            print('DEBUG: Files to use in workspace:')
+            for path in sorted(files_map):
+                print('DEBUG:  ', files_map[path], path)
+            with self.prepareWorkspace(files_map) as ws_path:
+                process = self.runBlenderScriptProcessor(ws_path, 'compose', cfg, blendfile=self._cfg.project)
+                outs = self._processOutputs(process, show_out=True)
 
                 # Find the compose filepath in the stdout
                 compose_filepath = None
@@ -215,15 +217,55 @@ class ManagerTask(TaskBase):
                         return
                     self.statusComposeSet(blob['id'], compose_filepath or filename)
                     break
-                with self._status_lock:
-                    if not self._status['result']['compose']:
-                        self.stateError({self.name(): 'Result file of the compose operation not found'})
+                if not self._status['result']['compose']:
+                    self.stateError({self.name(): 'Result file of the compose operation not found'})
 
         except Exception as e:
             print('ERROR: Exception occurred during composing the result for task "%s": %s' % (self.name(), e))
             self.stateError({self.name(): 'Exception occurred during composing the result: %s' % (e,)})
 
         print('DEBUG: Compositing completed for task "%s"' % (self.name(),))
+
+    def _processOutputs(self, process, show_out = False):
+        '''Shows info from the process'''
+        outs = b''
+        errs = b''
+        try:
+            outs, errs = process.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            outs, errs = proc.communicate()
+            raise
+        finally:
+            if process.poll() == -9: # OOM kill
+                self.stateError({self.name(): 'The process was killed by Out Of Memory - try to use bigger VM for the Manager'})
+            if process.returncode != 0 or errs or show_out:
+                print('INFO: Process stdout:')
+                for line in outs.decode().split('\n'):
+                    print('  ' + line)
+            if process.returncode != 0 or errs:
+                print('WARN: The process seems not ended well:')
+                print('WARN: Process stderr:')
+                for line in errs.decode().split('\n'):
+                    print('  ' + line)
+        return outs
+
+    def isRenderComplete(self):
+        '''Checks that all the tasks was completed and results were downloaded'''
+        # The only tasks contains render results - is completed or stopped
+        task_end_states = {TaskState.COMPLETED.name, TaskState.STOPPED.name}
+
+        # Stopped tasks could contain no rendered samples
+        good_tasks = [ task for task in self._execution_status.values()
+            if task.get('state') in task_end_states
+            and task.get('samples_done') > 0
+        ]
+        tasks_set = set([ task.get('name') for task in good_tasks ])
+        tasks_samples = sum([ task.get('samples_done') for task in good_tasks ])
+        # Making sure all the samples-containing tasks is in render results
+        # and the completed samples is more or equal the required samples
+        return (tasks_set and tasks_set == set(self._results_render.keys())
+                and tasks_samples >= self._cfg.samples)
 
     def calculateWorkloadSamples(self, samples, agents):
         '''Calculating optimal number of samples per agent'''
@@ -381,6 +423,7 @@ class ManagerTask(TaskBase):
                             if task_status.get('samples_done'):
                                 return_samples -= task_status['samples_done']
                         else:
+                            # Due to the issue BlendNet#57 it's the only way for the stopped agent task
                             # Making sure user will not see more samples than actually rendered
                             task_status['samples_done'] = 0
                             # Cleaning results of failed task
@@ -422,33 +465,29 @@ class ManagerTask(TaskBase):
                 self.statusRemainingSet(int(remaining))
 
             # Check if all the samples was processed and tasks completed
-            with self._status_lock:
-                if self._status['results_processing']:
-                    # If the results are processing - let's not do anything
-                    time.sleep(1.0)
+            if self._status['results_processing']:
+                # If the results are processing - let's do nothing
+                pass
+
+            elif any([ task.get('state') == TaskState.ERROR.name for task in self._execution_status.values() ]):
+                for name, task in self._execution_status.items():
+                    if not task.get('state_error_info'):
+                        continue
+                    print('ERROR: Agent task "%s" ended up in ERROR state' % name)
+                    self.stateError({name: task.get('state_error_info')})
+
+            elif all([ task.get('state') in task_end_states for task in self._execution_status.values() ]):
+                if self._stop_task:
+                    print('INFO: Task %s is stopped' % self.name())
+                    self.stateStop()
+                    self._stop_task = False
+                    continue
+                if self._status['result']['compose']:
+                    print('INFO: Task %s is completed' % (self.name(),))
+                    self.stateComplete()
                     continue
 
-                if any([ task.get('state') == TaskState.ERROR.name for task in self._execution_status.values() ]):
-                    for name, task in self._execution_status.items():
-                        if not task.get('state_error_info'):
-                            continue
-                        print('ERROR: Agent task "%s" ended up in ERROR state' % name)
-                        self.stateError({name: task.get('state_error_info')})
-
-                elif all([ task.get('state') in task_end_states for task in self._execution_status.values() ]):
-                    if self._stop_task:
-                        print('INFO: Task %s is stopped' % self.name())
-                        self.stateStop()
-                        self._stop_task = False
-                        continue
-                    if self._status['result']['compose']:
-                        print('INFO: Task %s is completed' % (self.name(),))
-                        self.stateComplete()
-                        continue
-                    # >= to make sure some calculate bug will not stop the render done of the task
-                    if self._status['samples_done'] >= self._cfg.samples:
-                        print('INFO: Render of %s is done' % (self.name(),))
-                        time.sleep(1.0)
+            time.sleep(1.0)
 
         with self._state_lock:
             print('DEBUG: Execution watcher of task "%s" is ended with state %s' % (self.name(), self._state.name))

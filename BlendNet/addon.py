@@ -341,10 +341,10 @@ def updateManagerTasks():
         if item.received:
             continue
         result = managerDownloadTaskResult(task_name, 'compose')
-        if not result:
+        if result == False:
             print('INFO: Downloading the final render for %s...' % task_name)
             item.received = 'Downloading...'
-        else:
+        elif result != None:
             item.received = result
 
     manager_tasks_cache = tasks
@@ -513,6 +513,9 @@ def managerDownloadTaskResult(task_name, result_to_download, tempdir = None):
     out_path = os.path.join(out_dir, result_to_download, task_name + '.exr')
     if result_to_download == 'compose':
         compose_filepath = managerTaskStatus(task_name).get('compose_filepath')
+        if not compose_filepath:
+            print('WARN: Unable to get the compose_filepath for task', task_name)
+            return None
         out_path = bpy.path.abspath(compose_filepath)
     if not os.path.isabs(out_path):
         out_path = os.path.abspath(out_path)
@@ -545,7 +548,7 @@ def managerDownloadTaskResult(task_name, result_to_download, tempdir = None):
 
         manager_task_download_workers.add(task_name, result_to_download, out_path)
         manager_task_download_workers.start()
-        return None
+        return False
     return out_path
 
 def managerTaskConfig(task, conf):

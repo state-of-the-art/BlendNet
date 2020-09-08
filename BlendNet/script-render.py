@@ -35,9 +35,7 @@ import threading # To run timer and flush render periodically
 
 import bpy
 
-eprint('INFO: Loading project file "%s"' % task['project'])
-bpy.ops.wm.open_mainfile(filepath=task['project'])
-
+eprint("INFO: Preparing rendering of:", bpy.data.filepath)
 scene = bpy.context.scene
 
 # Set some required variables
@@ -97,6 +95,7 @@ class Commands:
         scene.render.image_settings.color_mode = 'RGB'
         scene.render.image_settings.color_depth = '32'
         scene.render.image_settings.exr_codec = 'DWAA'
+        # Should not be executed on the last sample otherwise will stuck right here
         bpy.data.images['Render Result'].save_render('_preview.exr')
         scene.render.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
         scene.render.image_settings.color_mode = 'RGBA'
@@ -145,5 +144,7 @@ eprint('INFO: Render process completed')
 
 # Render complete - saving the result image
 executeCommand('saveRender')
+# Save the final preview to update the user
+executeCommand('savePreview')
 
 eprint('INFO: Save render completed')
