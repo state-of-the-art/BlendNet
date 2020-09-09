@@ -412,6 +412,7 @@ class ManagerTask(TaskBase):
                     if task_status.get('state') in task_end_states:
                         print('DEBUG: Retreive details about the task %s execution' % task_name)
                         self.executionDetailsSet(agent.taskDetails(task_name).get(task_name), task_name)
+                        self.executionMessagesSet(agent.taskMessages(task_name).get(task_name), task_name)
                         agent.workEnded()
 
                     if task_status.get('state') == TaskState.STOPPED.name:

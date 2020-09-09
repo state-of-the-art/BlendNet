@@ -815,7 +815,20 @@ class BlendNetTaskInfoOperation(bpy.types.Operator):
                 return
             keys = BlendNet.addon.naturalSort(data.keys())
             for key in keys:
-                layout.label(text='%s: %s' % (key, data[key]))
+                if key == 'result':
+                    layout.label(text='%s:' % (key,))
+                    for k in data[key]:
+                        layout.label(text='  %s: %s' % (k, data[key][k]))
+                elif key == 'state_error_info':
+                    layout.label(text='%s:' % (key,), icon='ERROR')
+                    for it in data[key]:
+                        if isinstance(it, dict):
+                            for k, v in it.items():
+                                layout.label(text='  %s: %s' % (k, v))
+                        else:
+                            layout.label(text='  ' + str(it))
+                else:
+                    layout.label(text='%s: %s' % (key, data[key]))
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
         wm.popup_menu(drawPopup, title='Task info for "%s"' % task_name, icon='INFO')
@@ -824,8 +837,8 @@ class BlendNetTaskInfoOperation(bpy.types.Operator):
 
 class BlendNetTaskMessagesOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskmessages'
-    bl_label = 'Export task messages'
-    bl_description = 'Export the task execution messages'
+    bl_label = 'Show task messages'
+    bl_description = 'Show the task execution messages'
 
     @classmethod
     def poll(cls, context):
@@ -838,33 +851,38 @@ class BlendNetTaskMessagesOperation(bpy.types.Operator):
     def invoke(self, context, event):
         wm = context.window_manager
 
-        def drawPopupOk(self, context):
-            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='Task messages exported to %s.%s.messages.txt' % (bpy.data.filepath, task_name))
-
-        def drawPopupNo(self, context):
-            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='No task messages available for export for task "%s"' % (task_name,))
-
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
 
-        data = BlendNet.addon.managerTaskMessages(task_name)
-        if data:
-            keys = BlendNet.addon.naturalSort(data.keys())
-            with open('%s.%s.messages.txt' % (bpy.data.filepath, task_name), 'w') as f:
-                for key in keys:
-                    f.write('%s%s' % (key, os.linesep))
-                    for line in data[key]:
-                        f.write('\t%s%s' % (line, os.linesep))
+        out = BlendNet.addon.managerTaskMessages(task_name)
+        if not out:
+            self.report({'ERROR'}, 'No task messages found for "%s"' % (task_name,))
+            return {'CANCELLED'}
 
-        wm.popup_menu(drawPopupOk if data else drawPopupNo, title='Task messages for "%s"' % task_name, icon='TEXT')
+        data = []
+        keys = BlendNet.addon.naturalSort(out.keys())
+        for key in keys:
+            data.append(key)
+            for line in out[key]:
+                data.append('  ' + line)
+        data = '\n'.join(data)
+        prefix = task_name + 'messages'
+
+        def drawPopup(self, context):
+            layout = self.layout
+
+            if BlendNet.addon.showLogWindow(prefix, data):
+                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+            else:
+                layout.label(text='Unable to show the log window', icon='ERROR')
+
+        wm.popup_menu(drawPopup, title='Task messages for "%s"' % (task_name,), icon='TEXT')
 
         return {'FINISHED'}
 
 class BlendNetTaskDetailsOperation(bpy.types.Operator):
     bl_idname = 'blendnet.taskdetails'
-    bl_label = 'Export task details'
-    bl_description = 'Export the task execution details'
+    bl_label = 'Show task details'
+    bl_description = 'Show the task execution details'
 
     @classmethod
     def poll(cls, context):
@@ -877,26 +895,31 @@ class BlendNetTaskDetailsOperation(bpy.types.Operator):
     def invoke(self, context, event):
         wm = context.window_manager
 
-        def drawPopupOk(self, context):
-            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='Task details exported to %s.%s.details.txt' % (bpy.data.filepath, task_name))
-
-        def drawPopupNo(self, context):
-            task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-            self.layout.label(text='No task details available for export for task "%s"' % (task_name,))
-
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
 
-        data = BlendNet.addon.managerTaskDetails(task_name)
-        if data:
-            keys = BlendNet.addon.naturalSort(data.keys())
-            with open('%s.%s.details.txt' % (bpy.data.filepath, task_name), 'w') as f:
-                for key in keys:
-                    f.write('%s%s' % (key, os.linesep))
-                    for line in data[key]:
-                        f.write('\t%s%s' % (line, os.linesep))
+        out = BlendNet.addon.managerTaskDetails(task_name)
+        if not out:
+            self.report({'ERROR'}, 'No task details found for "%s"' % (task_name,))
+            return {'CANCELLED'}
 
-        wm.popup_menu(drawPopupOk if data else drawPopupNo, title='Task details for "%s"' % task_name, icon='TEXT')
+        data = []
+        keys = BlendNet.addon.naturalSort(out.keys())
+        for key in keys:
+            data.append(key)
+            for line in out[key]:
+                data.append('  ' + str(line))
+        data = '\n'.join(data)
+        prefix = task_name + 'details'
+
+        def drawPopup(self, context):
+            layout = self.layout
+
+            if BlendNet.addon.showLogWindow(prefix, data):
+                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+            else:
+                layout.label(text='Unable to show the log window', icon='ERROR')
+
+        wm.popup_menu(drawPopup, title='Task details for "%s"' % (task_name,), icon='TEXT')
 
         return {'FINISHED'}
 
