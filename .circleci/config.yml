@@ -1,0 +1,48 @@
+version: 2.1
+
+workflows:
+  build_and_test:
+    jobs:
+      - build
+#     - blendnet_test:
+#         blendner_version: 2.80 # The first one supported
+#     - blendnet_test:
+#         blendner_version: lts
+#     - blendnet_test:
+#         blender_version: latest # Latest release available
+
+# nightly_test:
+#   triggers:
+#     - schedule:
+#         cron: "0 6 * * *"
+#         filters:
+#           branches:
+#             only:
+#               - master
+#   jobs:
+#     - blendnet_test:
+#         blendner_version: 2.80 # The first 
+#     - blendnet_test:
+#         blendner_version: lts
+#     - blendnet_test:
+#         blender_version: latest
+
+jobs:
+  build:
+    docker:
+      - image: cimg/base:stable-20.04
+    steps:
+      - checkout:
+          path: blendnet
+
+      - run:
+          name: Packing dist archive
+          command: blendnet/.circleci/build.sh
+
+      # TODO: run static tests
+      #- store_test_results:
+      #    path: results/reports
+
+      - store_artifacts:
+          path: results
+          destination: results
