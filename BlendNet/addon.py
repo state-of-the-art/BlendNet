@@ -818,11 +818,10 @@ def getMinimalCheapPriceBG(inst_type, context = None):
 
     return info[0]
 
-def showLogWindow(prefix, data):
+def showLogWindow(prefix, data, suffix = '.log'):
     '''Opens a new window and shows the log in it'''
-    log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8',
-            prefix=prefix + '_' + datetime.now().strftime('%y%m%d-%H%M%S_'),
-            suffix='.log')
+    prefix += '_' + datetime.now().strftime('%y%m%d-%H%M%S')
+    log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', prefix=prefix, suffix=suffix)
     log_file.write(data)
     log_file.flush()
 
@@ -835,6 +834,6 @@ def showLogWindow(prefix, data):
         area.type = 'TEXT_EDITOR'
         area.spaces[0].show_line_numbers = False
         area.spaces[0].show_syntax_highlight = False
-        area.spaces[0].text = bpy.data.texts[os.path.basename(log_file.name)]
+        area.spaces[0].text = bpy.data.texts[-1]
         return True
     return False
