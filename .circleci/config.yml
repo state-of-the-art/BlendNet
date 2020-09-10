@@ -6,26 +6,26 @@ workflows:
       - build
       - blendnet_test:
           blender_version: "2.80" # The first one supported
-#     - blendnet_test:
-#         blendner_version: lts
-#     - blendnet_test:
-#         blender_version: latest # Latest release available
+      - blendnet_test:
+          blender_version: lts
+      - blendnet_test:
+          blender_version: latest # Latest release available
 
-# nightly_test:
-#   triggers:
-#     - schedule:
-#         cron: "0 6 * * *"
-#         filters:
-#           branches:
-#             only:
-#               - master
-#   jobs:
-#     - blendnet_test:
-#         blendner_version: 2.80 # The first 
-#     - blendnet_test:
-#         blendner_version: lts
-#     - blendnet_test:
-#         blender_version: latest
+  nightly_test:
+    triggers:
+      - schedule:
+          cron: "0 6 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - blendnet_test:
+          blender_version: "2.80" # The first one supported
+      - blendnet_test:
+          blender_version: lts
+      - blendnet_test:
+          blender_version: latest # Latest release available
 
 jobs:
   build:
@@ -74,28 +74,47 @@ jobs:
             docker cp blendnet blendnet-srv:/srv
             docker cp blender blendnet-srv:/srv
             docker cp workspace blendnet-srv:/srv
+            mkdir -p results
           no_output_timeout: 5m
 
       - run:
           name: Run blendnet-manager
           background: true
-          command: >
-            docker run --name blendnet-manager -m 2G --rm -it --volumes-from blendnet-srv
-            ubuntu:20.04 /srv/workspace/test_run_service.sh manager
+          command: |
+            # Run Manager for max 10 minutes
+            timeout -k 5 360 docker run --name blendnet-manager -m 2G --rm -it \
+                --volumes-from blendnet-srv ubuntu:20.04 \
+                /srv/workspace/test_run_service.sh manager 2>&1 | tee results/manager.log || true
+            echo "Check exceptions in the log"
+            grep -q -v '^Traceback' results/manager.log
+            echo "Check errors in the log"
+            grep -q -v '^ERROR: ' results/manager.log
 
       - run:
           name: Run blendnet-agent-1
           background: true
-          command: >
-            docker run --name blendnet-agent-1 -m 2G --rm -it --volumes-from blendnet-srv
-            ubuntu:20.04 /srv/workspace/test_run_service.sh agent
+          command: |
+            # Run Agent for max 10 minutes
+            timeout -k 5 360 docker run --name blendnet-agent-1 -m 2G --rm -it \
+                --volumes-from blendnet-srv ubuntu:20.04 \
+                /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-1.log || true
+            echo "Check exceptions in the log"
+            grep -q -v '^Traceback' results/agent-1.log
+            echo "Check errors in the log"
+            grep -q -v '^ERROR: ' results/agent-1.log
 
       - run:
           name: Run blendnet-agent-2
           background: true
-          command: >
-            docker run --name blendnet-agent-2 -m 2G --rm -it --volumes-from blendnet-srv
-            ubuntu:20.04 /srv/workspace/test_run_service.sh agent
+          command: |
+            # Run Agent for max 10 minutes
+            timeout -k 5 360 docker run --name blendnet-agent-2 -m 2G --rm -it \
+                --volumes-from blendnet-srv ubuntu:20.04 \
+                /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-2.log || true
+            echo "Check exceptions in the log"
+            grep -q -v '^Traceback' results/agent-2.log
+            echo "Check errors in the log"
+            grep -q -v '^ERROR: ' results/agent-2.log
 
       - run:
           name: Run test blend file render
@@ -105,10 +124,11 @@ jobs:
           name: Clean the docker containers
           when: always
           command: |
-            docker rm -f blendnet-manager
-            docker rm -f blendnet-agent-1
-            docker rm -f blendnet-agent-2
-            docker rm -f blendnet-srv
+            # TODO: when BN-64 is completed - stop Manager and Agents properly
+            docker rm -f blendnet-agent-1 || true
+            docker rm -f blendnet-agent-2 || true
+            docker rm -f blendnet-manager || true
+            docker rm -f blendnet-srv || true
 
       # TODO: Add test results
       #- store_test_results:
