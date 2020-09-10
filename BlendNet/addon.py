@@ -13,30 +13,12 @@ import site
 import random
 import string
 import tempfile
-from urllib.request import urlopen
-from html.parser import HTMLParser
 from datetime import datetime
 
 from . import providers
 from . import ManagerClient
 from .Workers import Workers
-
-class LinkHTMLParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self._links = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag != 'a':
-            return
-        for attr in attrs:
-            if attr[0] == 'href':
-                self._links.append(attr[1])
-
-    def links(self):
-        out = self._links
-        self._links = []
-        return out
+from .list_blender_versions import getBlenderVersions
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
@@ -599,12 +581,6 @@ def fillAvailableBlenderDists(scene = None, context = None):
         global available_blender_dists_cache
         global available_blender_dists_cache_list
 
-        mirrors = [
-            'https://download.blender.org/release/',
-            'https://mirror.clarkson.edu/blender/release/',
-            'https://ftp.nluug.nl/pub/graphics/blender/release/',
-        ]
-
         ctx = ssl.create_default_context()
         print('INFO: Search for blender embedded certificates...')
         for path in site.getsitepackages():
@@ -620,57 +596,7 @@ def fillAvailableBlenderDists(scene = None, context = None):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-        for url in mirrors:
-            try:
-                # Getting the first layer of mirror list
-                parser = LinkHTMLParser()
-                with urlopen(url, timeout=5, context=ctx) as f:
-                    parser.feed(f.read().decode())
-
-                # Processing links of the first layer
-                links = parser.links()
-                dirs = []
-                for l in links:
-                    if not l.startswith('Blender'):
-                        continue
-                    ver = int(''.join(c for c in l if c.isdigit()))
-                    if ver >= 280: # >= 2.80 is supported
-                        dirs.append(l)
-
-                # Process the versions from latest to oldest
-                dirs.reverse()
-
-                # Getting lists of the specific dirs
-                for d in dirs:
-                    with urlopen(url+d, timeout=5, context=ctx) as f:
-                        parser.feed(f.read().decode())
-
-                    # Processing links of the dirs
-                    links = parser.links()
-                    # Process the versions from latest to oldest
-                    links.reverse()
-                    for l in links:
-                        if not l.endswith('.sha256'):
-                            continue
-                        # Getting the file and search for linux dist there
-                        with urlopen(url+d+l, timeout=5, context=ctx) as f:
-                            for line in f:
-                                sha256, name = line.decode().strip().split()
-                                if '-linux' not in name or '64.tar' not in name:
-                                    continue
-                                ver = name.split('-')[1]
-                                available_blender_dists_cache[ver] = {
-                                    'url': url+d+name,
-                                    'checksum': sha256,
-                                }
-                                print('INFO: found blender version: %s (%s %s)' % (ver, url, sha256))
-
-                # Don't need to check the other sites
-                break
-
-            except Exception as e:
-                print('WARN: unable to get mirror list for: %s %s' % (url, e))
-
+        available_blender_dists_cache = getBlenderVersions(ctx)
         keys = naturalSort(available_blender_dists_cache.keys())
         out = []
         for key in keys:

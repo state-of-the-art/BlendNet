@@ -4,8 +4,8 @@ workflows:
   build_and_test:
     jobs:
       - build
-#     - blendnet_test:
-#         blendner_version: 2.80 # The first one supported
+      - blendnet_test:
+          blender_version: "2.80" # The first one supported
 #     - blendnet_test:
 #         blendner_version: lts
 #     - blendnet_test:
@@ -40,6 +40,77 @@ jobs:
           command: blendnet/.circleci/build.sh
 
       # TODO: run static tests
+      #- store_test_results:
+      #    path: results/reports
+
+      - store_artifacts:
+          path: results
+          destination: results
+
+  blendnet_test:
+    parameters:
+      blender_version:
+        description: |
+          Blender version to use
+          * <version> - exact version you need
+          * lts    - latest available LTS version
+          * latest - latest available version
+        type: string
+    docker:
+      - image: cimg/base:stable-20.04
+
+    steps:
+      - checkout:
+          path: blendnet
+
+      - setup_remote_docker
+
+      - run:
+          name: Preparing to the test execution
+          command: |
+            blendnet/.circleci/test_prepare.sh "<< parameters.blender_version >>"
+            # Creating the docker container to store the data
+            docker create -v /srv --name blendnet-srv alpine /bin/true
+            docker cp blendnet blendnet-srv:/srv
+            docker cp blender blendnet-srv:/srv
+            docker cp workspace blendnet-srv:/srv
+          no_output_timeout: 5m
+
+      - run:
+          name: Run blendnet-manager
+          background: true
+          command: >
+            docker run --name blendnet-manager -m 2G --rm -it --volumes-from blendnet-srv
+            ubuntu:20.04 /srv/workspace/test_run_service.sh manager
+
+      - run:
+          name: Run blendnet-agent-1
+          background: true
+          command: >
+            docker run --name blendnet-agent-1 -m 2G --rm -it --volumes-from blendnet-srv
+            ubuntu:20.04 /srv/workspace/test_run_service.sh agent
+
+      - run:
+          name: Run blendnet-agent-2
+          background: true
+          command: >
+            docker run --name blendnet-agent-2 -m 2G --rm -it --volumes-from blendnet-srv
+            ubuntu:20.04 /srv/workspace/test_run_service.sh agent
+
+      - run:
+          name: Run test blend file render
+          command: blendnet/.circleci/test_execute.sh "<< parameters.blender_version >>"
+
+      - run:
+          name: Clean the docker containers
+          when: always
+          command: |
+            docker rm -f blendnet-manager
+            docker rm -f blendnet-agent-1
+            docker rm -f blendnet-agent-2
+            docker rm -f blendnet-srv
+
+      # TODO: Add test results
       #- store_test_results:
       #    path: results/reports
 
