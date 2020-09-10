@@ -169,10 +169,10 @@ def getCaches():
                     cpath = cachedir / f
                     if not (localdir / cpath).is_file():
                         print('ERROR: Unable to locate fluid sim cache file '
-                              '"%s" for object modifier %s --> %s' % (cpath.to_posix(), o.name, mod.name))
-                        bad.add(cpath.to_posix())
+                              '"%s" for object modifier %s --> %s' % (cpath.as_posix(), o.name, mod.name))
+                        bad.add(cpath.as_posix())
                     else:
-                        good.add(cpath.to_posix())
+                        good.add(cpath.as_posix())
                 continue
             elif mod.type == 'SMOKE':
                 # Deprecated in >= 2.82
