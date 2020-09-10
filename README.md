@@ -2,6 +2,13 @@ BlendNet
 ========
 
 [![Join the chat at https://gitter.im/state-of-the-art/BlendNet](https://badges.gitter.im/state-of-the-art/BlendNet.svg)](https://gitter.im/state-of-the-art/BlendNet?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![CircleCI master build](https://circleci.com/gh/state-of-the-art/BlendNet/tree/master.svg?style=shield)](https://app.circleci.com/pipelines/github/state-of-the-art/BlendNet?branch=master)
+
+[![CircleCI nightly 2.80](https://img.shields.io/badge/dynamic/json?label=nightly%202.80&query=%24%5B%3F%28%40.branch%20%3D%3D%20%22master%22%20%26%26%20%40.workflows.workflow_name%20%3D%3D%20%22nightly_blendnet_test%22%20%26%26%20%40.workflows.%20job_name%20%3D%3D%20%22blendnet_test-1%22%29%5D.status&url=https%3A%2F%2Fcircleci.com%2Fapi%2Fv1.1%2Fproject%2Fgh%2Fstate-of-the-art%2FBlendNet%3Flimit%3D10)](https://app.circleci.com/pipelines/github/state-of-the-art/BlendNet?branch=master) - testing BlendNet with Blender 2.80 every night
+
+[![CircleCI nightly LTS](https://img.shields.io/badge/dynamic/json?label=nightly%20lts&query=%24%5B%3F%28%40.branch%20%3D%3D%20%22master%22%20%26%26%20%40.workflows.workflow_name%20%3D%3D%20%22nightly_blendnet_test%22%20%26%26%20%40.workflows.%20job_name%20%3D%3D%20%22blendnet_test-2%22%29%5D.status&url=https%3A%2F%2Fcircleci.com%2Fapi%2Fv1.1%2Fproject%2Fgh%2Fstate-of-the-art%2FBlendNet%3Flimit%3D10)](https://app.circleci.com/pipelines/github/state-of-the-art/BlendNet?branch=master) - testing BlendNet with Blender LTS every night
+
+[![CircleCI nightly Latest](https://img.shields.io/badge/dynamic/json?label=nightly%20latest&query=%24%5B%3F%28%40.branch%20%3D%3D%20%22master%22%20%26%26%20%40.workflows.workflow_name%20%3D%3D%20%22nightly_blendnet_test%22%20%26%26%20%40.workflows.%20job_name%20%3D%3D%20%22blendnet_test-3%22%29%5D.status&url=https%3A%2F%2Fcircleci.com%2Fapi%2Fv1.1%2Fproject%2Fgh%2Fstate-of-the-art%2FBlendNet%3Flimit%3D10)](https://app.circleci.com/pipelines/github/state-of-the-art/BlendNet?branch=master) - testing BlendNet with Blender latest release every night
 
 Blender network rendering farm system with dynamic allocating of required resources.
 
