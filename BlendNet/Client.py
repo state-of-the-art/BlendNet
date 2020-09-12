@@ -185,7 +185,6 @@ class ClientEngine:
 
     def get(self, path):
         req = self._request(path)
-
         if not req:
             return None
 
@@ -193,7 +192,6 @@ class ClientEngine:
 
     def delete(self, path):
         req = self._request(path, None, 'DELETE')
-
         if not req:
             return None
 
@@ -201,6 +199,8 @@ class ClientEngine:
 
     def put(self, path, stream, size, checksum = None):
         req = self._request(path, stream, 'PUT')
+        if not req:
+            return None
 
         req.add_header('Content-Length', str(size))
         req.add_header('Content-Type', 'application/octet-stream')
@@ -211,7 +211,6 @@ class ClientEngine:
 
     def download(self, path, out):
         req = self._request(path)
-
         if not req:
             return None
 

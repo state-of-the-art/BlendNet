@@ -227,7 +227,11 @@ def getNodeLog(instance_id, context = None):
     return providers.getNodeLog(instance_id)
 
 def getManagerIP(context = None):
-    return getResources(context).get('manager', {}).get('ip')
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    default_address = None
+    if prefs.resource_provider == 'local':
+        default_address = prefs.manager_address
+    return getResources(context).get('manager', {}).get('ip', default_address)
 
 def getManagerStatus():
     if isManagerStarted():
@@ -258,7 +262,10 @@ def isManagerStopped():
     return getResources().get('manager', {}).get('stopped', False)
 
 def isManagerActive():
-    return bool(requestManagerInfo())
+    data = requestManagerInfo()
+    if isinstance(data, dict):
+        return data.get('engine') == 'Manager'
+    return False
 
 def getTaskProjectPrefix():
     '''Return task-useful name based on the project name'''
@@ -342,8 +349,8 @@ def getManagerInfo():
     if manager_info_timer:
         manager_info_timer.cancel()
 
-    print('DEBUG: Periodic update manager info')
     info = ManagerClient(getManagerIP(), getConfig()).info()
+    print('DEBUG: Periodic update manager info', bool(info))
     manager_info_cache[0] = info or {}
     manager_info_cache[1] = int(time.time())
 
