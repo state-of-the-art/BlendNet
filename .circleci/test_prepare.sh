@@ -35,3 +35,18 @@ openssl req -x509 -nodes -newkey rsa:4096 \
 # Required ca.crt for Manager
 cp workspace/server.crt workspace/ca.crt
 cp -a "${ROOT}/.circleci/test_run_service.sh" workspace
+cp -a "${ROOT}/.circleci/test_script_addon.py" workspace
+
+# Download the test project
+testproject_url='https://github.com/state-of-the-art/BlendNet/wiki/files/blendnet-test-project'
+# (not perfect but simple & working for current CI)
+if [ "${BLENDER_VERSION}" = '2.80' ]; then
+    testproject_url="${testproject_url}-2.80"
+else
+    testproject_url="${testproject_url}-2.82"
+fi
+testproject_url="${testproject_url}-v0.3.zip"
+
+curl -fLo test-project.zip "${testproject_url}"
+unzip -d workspace test-project.zip
+mv workspace/blendnet-test-project* workspace/test-project

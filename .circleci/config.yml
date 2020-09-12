@@ -71,54 +71,84 @@ jobs:
             blendnet/.circleci/test_prepare.sh "<< parameters.blender_version >>"
             # Creating the docker container to store the data
             docker create -v /srv --name blendnet-srv alpine /bin/true
-            docker cp blendnet blendnet-srv:/srv
+            mkdir -p scripts/addons
+            cp -a blendnet scripts/addons
+            docker cp scripts blendnet-srv:/srv
             docker cp blender blendnet-srv:/srv
             docker cp workspace blendnet-srv:/srv
             mkdir -p results
           no_output_timeout: 5m
 
       - run:
-          name: Run blendnet-manager
-          background: true
-          command: |
-            # Run Manager for max 10 minutes
-            timeout -k 5 360 docker run --name blendnet-manager -m 2G --rm -it \
-                --volumes-from blendnet-srv ubuntu:20.04 \
-                /srv/workspace/test_run_service.sh manager 2>&1 | tee results/manager.log || true
-            echo "Check exceptions in the log"
-            grep -q -v '^Traceback' results/manager.log
-            echo "Check errors in the log"
-            grep -q -v '^ERROR: ' results/manager.log
-
-      - run:
           name: Run blendnet-agent-1
           background: true
           command: |
             # Run Agent for max 10 minutes
-            timeout -k 5 360 docker run --name blendnet-agent-1 -m 2G --rm -it \
+            docker run --name blendnet-agent-1 -m 2G --rm -it \
                 --volumes-from blendnet-srv ubuntu:20.04 \
                 /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-1.log || true
+
             echo "Check exceptions in the log"
-            grep -q -v '^Traceback' results/agent-1.log
+            grep '^Traceback' results/agent-1.log && exit 1 || echo ok
             echo "Check errors in the log"
-            grep -q -v '^ERROR: ' results/agent-1.log
+            grep '^ERROR: ' results/agent-1.log && exit 2 || echo ok
+            grep '^Fatal Python error: ' results/agent-1.log && exit 3 || echo ok
 
       - run:
           name: Run blendnet-agent-2
           background: true
           command: |
             # Run Agent for max 10 minutes
-            timeout -k 5 360 docker run --name blendnet-agent-2 -m 2G --rm -it \
+            docker run --name blendnet-agent-2 -m 2G --rm -it \
                 --volumes-from blendnet-srv ubuntu:20.04 \
                 /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-2.log || true
+
             echo "Check exceptions in the log"
-            grep -q -v '^Traceback' results/agent-2.log
+            grep '^Traceback' results/agent-2.log && exit 1 || echo ok
             echo "Check errors in the log"
-            grep -q -v '^ERROR: ' results/agent-2.log
+            grep '^ERROR: ' results/agent-2.log && exit 2 || echo ok
+            grep '^Fatal Python error: ' results/agent-2.log && exit 3 || echo ok
 
       - run:
-          name: Run test blend file render
-          command: blendnet/.circleci/test_execute.sh "<< parameters.blender_version >>"
+          name: Run blendnet-manager
+          background: true
+          command: |
+            # Wait for blendnet-agent-1 container
+            while ! docker ps | grep blendnet-agent-1; do echo "waiting agent-1"; docker ps; sleep 1; done
+            # Wait for blendnet-agent-2 container
+            while ! docker ps | grep blendnet-agent-2; do echo "waiting agent-2"; docker ps; sleep 1; done
+
+            # Run Manager for max 10 minutes
+            docker run --name blendnet-manager -m 2G --rm -it \
+                --link blendnet-agent-1:blendnet-agent-1-host \
+                --link blendnet-agent-2:blendnet-agent-2-host \
+                --volumes-from blendnet-srv ubuntu:20.04 \
+                /srv/workspace/test_run_service.sh manager 2>&1 | tee results/manager.log || true
+
+            echo "Check exceptions in the log"
+            grep '^Traceback' results/manager.log && exit 1 || echo ok
+            echo "Check errors in the log"
+            grep '^ERROR: ' results/manager.log && exit 2 || echo ok
+            grep '^Fatal Python error: ' results/manager.log && exit 3 || echo ok
+
+      - run:
+          name: Run blendnet-executor
+          background: true
+          command: |
+            # Wait for blendnet-manager container
+            while ! docker ps | grep blendnet-manager; do echo "waiting manager"; docker ps; sleep 1; done
+            # Run executor to connect with Manager
+            docker run --name blendnet-executor -m 1G --rm -it \
+                --link blendnet-manager:blendnet-manager-host \
+                --volumes-from blendnet-srv ubuntu:20.04 /bin/sleep 3600 || true
+
+      - run:
+          name: Run Addon test
+          command: blendnet/.circleci/test_execute_addon.sh "<< parameters.blender_version >>" || exit 1
+
+      - run:
+          name: Run API test
+          command: blendnet/.circleci/test_execute_api.sh "<< parameters.blender_version >>" || exit 1
 
       - run:
           name: Clean the docker containers
@@ -128,6 +158,7 @@ jobs:
             docker rm -f blendnet-agent-1 || true
             docker rm -f blendnet-agent-2 || true
             docker rm -f blendnet-manager || true
+            docker rm -f blendnet-executor || true
             docker rm -f blendnet-srv || true
 
       # TODO: Add test results

@@ -546,7 +546,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
                 if area.spaces.active.image.type == 'RENDER_RESULT':
                     return area
 
-    def invoke(self, context, event):
+    def init(self, context):
+        '''Initializes the execution'''
         if not bpy.data.filepath:
             self.report({'ERROR'}, 'Unable to render not saved project. Please save it somewhere.')
             return {'CANCELLED'}
@@ -589,6 +590,9 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
 
         return {'RUNNING_MODAL'}
 
+    def invoke(self, context, event):
+        return self.init(context)
+
     def modal(self, context, event):
         if event.type != 'TIMER':
             return {'PASS_THROUGH'}
@@ -601,6 +605,12 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
 
     def execute(self, context):
         scene = context.scene
+        wait = False
+        if not hasattr(self, '_frame'):
+            wait = True # The execute is running directly, so run in fg
+            if 'CANCELLED' in self.init(context):
+                self.report({'ERROR'}, 'Unable to init task preparation')
+                return {'CANCELLED'}
 
         scene.frame_current = self._frame
 
@@ -634,6 +644,12 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             self._timer = context.window_manager.event_timer_add(3.0, window=context.window)
 
         status = BlendNet.addon.managerTaskUploadFilesStatus()
+        if wait:
+            for retry in range(1, 10):
+                status = BlendNet.addon.managerTaskUploadFilesStatus()
+                if not status:
+                    break
+                time.sleep(1)
         if status:
             self.report({'INFO'}, 'Uploading process for task %s: %s' % (self._task_name, status))
             return {'PASS_THROUGH'}
