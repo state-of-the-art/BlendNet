@@ -2,7 +2,6 @@ bl_info = {
     'name': 'BlendNet - distributed cloud render',
     'author': 'www.state-of-the-art.io',
     'version': (0, 3, 0),
-    'warning': 'development version',
     'blender': (2, 80, 0),
     'location': 'Properties --> Render --> BlendNet Render',
     'description': 'Allows to easy allocate resources in cloud and '
@@ -878,6 +877,8 @@ class BlendNetTaskMessagesOperation(bpy.types.Operator):
         keys = BlendNet.addon.naturalSort(out.keys())
         for key in keys:
             data.append(key)
+            if not out[key]:
+                continue
             for line in out[key]:
                 data.append('  ' + line)
         data = '\n'.join(data)
@@ -922,6 +923,8 @@ class BlendNetTaskDetailsOperation(bpy.types.Operator):
         keys = BlendNet.addon.naturalSort(out.keys())
         for key in keys:
             data.append(key)
+            if not out[key]:
+                continue
             for line in out[key]:
                 data.append('  ' + str(line))
         data = '\n'.join(data)
