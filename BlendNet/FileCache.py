@@ -26,7 +26,7 @@ class FileCache:
         # Ensure tmp files will be ok
         self._safe_pattern = re.compile('[\\W_]+', re.UNICODE)
 
-        self._cache_dir = os.path.join(path, name)
+        self._cache_dir = os.path.abspath(os.path.join(path, name))
         os.makedirs(self._cache_dir, 0o700, True)
         self._blobs_dir = os.path.join(self._cache_dir, 'blobs')
         os.makedirs(self._blobs_dir, 0o700, True)
