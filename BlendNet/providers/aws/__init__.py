@@ -24,6 +24,7 @@ import ssl
 import site
 import urllib.request
 import subprocess
+import pathlib
 from base64 import b64encode
 
 METADATA_URL = 'http://169.254.169.254/latest/'
