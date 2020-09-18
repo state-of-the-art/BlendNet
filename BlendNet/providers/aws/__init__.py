@@ -24,6 +24,7 @@ import ssl
 import site
 import urllib.request
 import subprocess
+from base64 import b64encode
 
 METADATA_URL = 'http://169.254.169.254/latest/'
 
@@ -290,8 +291,6 @@ def createInstanceManager(cfg):
         # No instance existing - than we can proceed
         pass
 
-    startup_script_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', newline='\n', suffix='.sh')
-
     image = _getImageAmi()
     disk_config = [{
         'DeviceName': image[1],
@@ -302,24 +301,9 @@ def createInstanceManager(cfg):
         },
     }]
 
-    options = [
-        'ec2', 'run-instances',
-        '--tag-specifications', 'ResourceType=instance,Tags=['
-            '{Key=Name,Value=%s},'
-            '{Key=Session,Value=%s},'
-            '{Key=Type,Value=manager}]' % (cfg['instance_name'], cfg['session_id']),
-        '--image-id', image[0],
-        '--instance-type', cfg['instance_type'],
-        '--iam-instance-profile', '{"Name":"blendnet-manager"}',
-        '--block-device-mappings', json.dumps(disk_config),
-        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
-        '--security-groups', 'blendnet-manager',
-        '--user-data', 'file://' + startup_script_file.name,
-    ]
-
     # TODO: make script overridable
     # TODO: too much hardcode here
-    startup_script_file.write('''#!/bin/sh
+    startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'
 dpkg -l libxrender1 libxi6 libgl1
 if [ $? -gt 0 ]; then
@@ -371,12 +355,26 @@ echo '--> Run the BlendNet manager'
 systemctl daemon-reload
 systemctl enable blendnet-manager.service
 systemctl start blendnet-manager.service
-    '''.format(
+'''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
         session_id=cfg['session_id'],
-    ))
-    startup_script_file.flush()
+    )
+
+    options = [
+        'ec2', 'run-instances',
+        '--tag-specifications', 'ResourceType=instance,Tags=['
+            '{Key=Name,Value=%s},'
+            '{Key=Session,Value=%s},'
+            '{Key=Type,Value=manager}]' % (cfg['instance_name'], cfg['session_id']),
+        '--image-id', image[0],
+        '--instance-type', cfg['instance_type'],
+        '--iam-instance-profile', '{"Name":"blendnet-manager"}',
+        '--block-device-mappings', json.dumps(disk_config),
+        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
+        '--security-groups', 'blendnet-manager',
+        '--user-data', b64encode(bytes(startup_script, 'utf-8')).decode('ascii'),
+    ]
 
     # Creating an instance
     print('INFO: Creating manager %s' % (cfg['instance_name'],))
@@ -398,8 +396,6 @@ def createInstanceAgent(cfg):
         # No instance existing - than we can proceed
         pass
 
-    startup_script_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', newline='\n', suffix='.sh')
-
     image = _getImageAmi()
     disk_config = [{
         'DeviceName': image[1],
@@ -410,49 +406,9 @@ def createInstanceAgent(cfg):
         },
     }]
 
-    options = [
-        'ec2', 'run-instances',
-        '--tag-specifications', 'ResourceType=instance,Tags=['
-            '{Key=Name,Value=%s},'
-            '{Key=Session,Value=%s},'
-            '{Key=Type,Value=agent}]' % (cfg['instance_name'], cfg['session_id']),
-        '--image-id', image[0],
-        '--instance-type', cfg['instance_type'],
-        '--iam-instance-profile', '{"Name":"blendnet-agent"}',
-        '--block-device-mappings', json.dumps(disk_config),
-        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
-        '--security-groups', 'blendnet-agent',
-        '--user-data', 'file://' + startup_script_file.name,
-    ]
-
-    if cfg['use_cheap_instance']:
-        # Running in the cheapest zone
-        zone_prices = _getZonesMinimalSpotPrice(cfg['instance_type'])
-        (min_price_zone, min_price) = zone_prices.popitem()
-        for zone in zone_prices:
-            if zone_prices[zone] < min_price:
-                min_price = zone_prices[zone]
-                min_price_zone = zone
-        print('INFO: Running cheap agent instance with max price %f in zone %s (min %f)' % (
-            cfg['instance_max_price'],
-            min_price_zone, min_price,
-        ))
-        options.append('--placement')
-        options.append(json.dumps({
-            'AvailabilityZone': min_price_zone,
-        }))
-        options.append('--instance-market-options')
-        options.append(json.dumps({
-            'MarketType': 'spot',
-            'SpotOptions': {
-                'MaxPrice': str(cfg['instance_max_price']),
-                'SpotInstanceType': 'one-time',
-            },
-        }))
-
     # TODO: make script overridable
     # TODO: too much hardcode here
-    startup_script_file.write('''#!/bin/sh
+    startup_script = '''#!/bin/sh
 echo '--> Check for blender dependencies'
 dpkg -l libxrender1 libxi6 libgl1
 if [ $? -gt 0 ]; then
@@ -508,8 +464,47 @@ systemctl start blendnet-agent.service
         blender_sha256=cfg['dist_checksum'],
         session_id=cfg['session_id'],
         name=cfg['instance_name'],
-    ))
-    startup_script_file.flush()
+    )
+
+    options = [
+        'ec2', 'run-instances',
+        '--tag-specifications', 'ResourceType=instance,Tags=['
+            '{Key=Name,Value=%s},'
+            '{Key=Session,Value=%s},'
+            '{Key=Type,Value=agent}]' % (cfg['instance_name'], cfg['session_id']),
+        '--image-id', image[0],
+        '--instance-type', cfg['instance_type'],
+        '--iam-instance-profile', '{"Name":"blendnet-agent"}',
+        '--block-device-mappings', json.dumps(disk_config),
+        #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
+        '--security-groups', 'blendnet-agent',
+        '--user-data', b64encode(bytes(startup_script, 'utf-8')).decode('ascii'),
+    ]
+
+    if cfg['use_cheap_instance']:
+        # Running in the cheapest zone
+        zone_prices = _getZonesMinimalSpotPrice(cfg['instance_type'])
+        (min_price_zone, min_price) = zone_prices.popitem()
+        for zone in zone_prices:
+            if zone_prices[zone] < min_price:
+                min_price = zone_prices[zone]
+                min_price_zone = zone
+        print('INFO: Running cheap agent instance with max price %f in zone %s (min %f)' % (
+            cfg['instance_max_price'],
+            min_price_zone, min_price,
+        ))
+        options.append('--placement')
+        options.append(json.dumps({
+            'AvailabilityZone': min_price_zone,
+        }))
+        options.append('--instance-market-options')
+        options.append(json.dumps({
+            'MarketType': 'spot',
+            'SpotOptions': {
+                'MaxPrice': str(cfg['instance_max_price']),
+                'SpotInstanceType': 'one-time',
+            },
+        }))
 
     # Creating an instance
     print('INFO: Creating agent %s' % (cfg['instance_name'],))
