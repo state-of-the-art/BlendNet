@@ -28,10 +28,15 @@ def getImages():
         if i.packed_file or i.source != 'FILE':
             continue
 
-        path = Path(bpy.path.abspath(i.filepath)).relative_to(localdir)
+        try:
+            path = Path(bpy.path.abspath(i.filepath)).relative_to(localdir)
+        except:
+            print('ERROR: The image is not relative to the project dir: "%s"' % i.filepath)
+            bad.add(i.filepath)
+            continue
 
         if not (localdir / path).is_file():
-            print('ERROR: Unable to find image: "%s"' % i.filepath)
+            print('ERROR: The image is not relative to the project dir: "%s"' % i.filepath)
             bad.add(i.filepath)
         else:
             good.add(path.as_posix())
@@ -57,7 +62,12 @@ def getCaches():
 
             if mod.type == 'FLUID' and mod.fluid_type == 'DOMAIN':
                 # New mantaflow added in 2.82
-                cachedir = Path(bpy.path.abspath(mod.domain_settings.cache_directory)).relative_to(localdir)
+                try:
+                    cachedir = Path(bpy.path.abspath(mod.domain_settings.cache_directory)).relative_to(localdir)
+                except:
+                    print('ERROR: Cache dir is not relative to the project dir: "%s"' % mod.domain_settings.cache_directory)
+                    bad.add(mod.domain_settings.cache_directory)
+                    continue
                 if not (localdir / cachedir).is_dir():
                     print('ERROR: Not a relative/not existing path of the cachedir '
                           '"%s" for object modifier %s --> %s' % (mod.domain_settings.cache_directory, o.name, mod.name))
@@ -144,7 +154,12 @@ def getCaches():
 
             elif mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
                 # Deprecated: < 2.82
-                cachedir = Path(bpy.path.abspath(mod.settings.filepath)).relative_to(localdir)
+                try:
+                    cachedir = Path(bpy.path.abspath(mod.settings.filepath)).relative_to(localdir)
+                except:
+                    print('ERROR: Cache dir is not relative to the project dir: "%s"' % mod.settings.filepath)
+                    bad.add(mod.settings.filepath)
+                    continue
                 if not (localdir / cachedir).is_dir():
                     print('ERROR: Not a relative/not existing path of the cachedir '
                           '"%s" for object modifier %s --> %s' % (mod.settings.filepath, o.name, mod.name))
