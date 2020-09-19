@@ -62,9 +62,15 @@ def checkLocation():
 def checkDependencies():
     return AWS_TOOL_PATH is not None
 
-def _executeAwsTool(*args):
-    '''Runs the aws tool and returns code and data as tuple'''
-    result = subprocess.run(AWS_EXEC_PREFIX + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def _executeAwsTool(*args, data=None):
+    '''Runs the aws tool and returns code and data as tuple, data will be sent to stdin as bytes'''
+    to_run = AWS_EXEC_PREFIX
+    if args[0] == 's3' and '--region' in AWS_EXEC_PREFIX:
+        to_run = to_run[:-2]
+    result = subprocess.run(to_run + args,
+            input=data,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
     if result.returncode != 0:
         raise AwsToolException('AWS tool returned %d during execution of "%s": %s' % (
             result.returncode, AWS_EXEC_PREFIX + args, result.stderr))
@@ -613,15 +619,15 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     return True
 
 def uploadDataToBucket(data, bucket_name, dest_path):
-    '''Upload file to the bucket'''
-    tmp_file = tempfile.NamedTemporaryFile()
-    tmp_file.write(data)
-    tmp_file.flush()
+    '''Upload data to the bucket'''
+    # WARN: tmpfile is not allowed to use by subprocesses on Win
 
-    uploadFileToBucket(tmp_file.name, bucket_name, dest_path)
+    dest_path = 's3://%s/%s' % (bucket_name, dest_path)
+
+    print('INFO: Uploading data to "%s" ...' % (dest_path,))
+    _executeAwsTool('s3', 'cp', '-', dest_path, data=data)
 
     return True
-
 
 def downloadDataFromBucket(bucket_name, path):
     tmp_file = tempfile.NamedTemporaryFile()
