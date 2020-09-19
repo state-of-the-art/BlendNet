@@ -72,6 +72,9 @@ def _executeAwsTool(*args):
     data = None
     try:
         data = json.loads(result.stdout)
+    except UnicodeDecodeError as e:
+        print('WARN: Found UnicodeDecodeError during parsing the aws output, switching to ISO-8859-1:', str(e))
+        data = json.loads(result.stdout.decode('ISO-8859-1'))
     except json.decoder.JSONDecodeError:
         pass
 
@@ -758,7 +761,8 @@ def _getZonesMinimalSpotPrice(inst_type):
 
 def getMinimalCheapPrice(inst_type):
     '''Will check the spot history and retreive the latest minimal price'''
-    return min(_getZonesMinimalSpotPrice(inst_type).values())
+    prices = _getZonesMinimalSpotPrice(inst_type).values()
+    return min(prices) if prices else -1.0
 
 findAWSTool()
 
