@@ -754,11 +754,14 @@ def getMinimalCheapPriceBG(inst_type, context = None):
 def showLogWindow(prefix, data, suffix = '.log'):
     '''Opens a new window and shows the log in it'''
     prefix += '_' + datetime.now().strftime('%y%m%d-%H%M%S')
-    log_file = tempfile.NamedTemporaryFile(mode='w', encoding='UTF-8', prefix=prefix, suffix=suffix)
-    log_file.write(data)
-    log_file.flush()
+    # WARN: Windows don't like NamedTemporaryFile for such purpose
+    temp_dir = tempfile.TemporaryDirectory(prefix='blendnet-log_')
+    log_file = os.path.join(temp_dir.name, prefix+suffix)
+    with open(log_file, 'w', encoding='utf-8') as fh:
+        fh.write(data)
+        fh.flush()
 
-    bpy.ops.text.open(filepath=log_file.name, internal=True)
+    bpy.ops.text.open(filepath=log_file, internal=True)
 
     # Opening new window to show the log
     bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
