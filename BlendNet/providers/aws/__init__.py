@@ -25,7 +25,6 @@ import site
 import urllib.request
 import subprocess
 import pathlib
-from base64 import b64encode
 
 METADATA_URL = 'http://169.254.169.254/latest/'
 
@@ -380,7 +379,7 @@ systemctl start blendnet-manager.service
         '--block-device-mappings', json.dumps(disk_config),
         #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
         '--security-groups', 'blendnet-manager',
-        '--user-data', b64encode(bytes(startup_script, 'utf-8')).decode('ascii'),
+        '--user-data', startup_script,
     ]
 
     # Creating an instance
@@ -485,7 +484,7 @@ systemctl start blendnet-agent.service
         '--block-device-mappings', json.dumps(disk_config),
         #'--key-name', 'default_key', # If you want to ssh to the instance (change createFirewall func too)
         '--security-groups', 'blendnet-agent',
-        '--user-data', b64encode(bytes(startup_script, 'utf-8')).decode('ascii'),
+        '--user-data', startup_script,
     ]
 
     if cfg['use_cheap_instance']:
