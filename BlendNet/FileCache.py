@@ -289,7 +289,7 @@ class FileCache:
         '''Available cache space in bytes'''
         if platform.system() == 'Windows':
             _, _, free_bytes = shutil.disk_usage(os.path.realpath(self._cache_dir))
-            return used_bytes
+            return free_bytes
         else:
             res = os.statvfs(self._cache_dir)
             return res.f_frsize * res.f_bavail
