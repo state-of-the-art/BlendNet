@@ -129,7 +129,9 @@ class ClientEngine:
                     print('WARN: Seems like wrong (or old) CA is loaded, reinit SSL context and repeat.')
                     self._initSSL()
                 else:
-                    if isinstance(e.reason, BrokenPipeError) and req.data:
+                    if req.data and (isinstance(e.reason, BrokenPipeError) # Linux
+                            or isinstance(e.reason, ConnectionAbortedError) # Windows
+                            or isinstance(e.reason, ConnectionResetError)): # Windows
                         # Ignore error "Broken pipe" for PUT requests - server checks sha1
                         return True
                     print('WARN: Communication issue with request to "%s": %s' % (req.full_url, e.reason))
