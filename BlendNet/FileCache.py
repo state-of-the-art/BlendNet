@@ -277,13 +277,11 @@ class FileCache:
 
     def getTotalSpace(self):
         '''Total cache space in bytes'''
-        res = os.statvfs(self._cache_dir)
-        return res.f_frsize * res.f_blocks
+        return shutil.disk_usage(self._cache_dir).total
 
     def getAvailableSpace(self):
         '''Available cache space in bytes'''
-        res = os.statvfs(self._cache_dir)
-        return res.f_frsize * res.f_bavail
+        return shutil.disk_usage(self._cache_dir).free
 
     def workspaceCreate(self, name, files_map):
         '''Creating new workspace and link the provided files into'''
