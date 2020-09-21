@@ -496,21 +496,23 @@ def _managerDownloadTaskResultsWorker(task, result, file_path):
         if item.name == task and result == 'compose' and item.received != 'skipped':
             item.received = file_path
 
-def managerDownloadTaskResult(task_name, result_to_download, tempdir = None):
+def managerDownloadTaskResult(task_name, result_to_download, result_dir = None):
     '''Check the result existance and download if it's not matching the existing one'''
     out_dir = os.path.dirname(bpy.path.abspath(bpy.context.scene.render.filepath))
     out_path = os.path.join(out_dir, result_to_download, task_name + '.exr')
     if result_to_download == 'compose':
         compose_filepath = managerTaskStatus(task_name).get('compose_filepath')
         if not compose_filepath:
-            print('WARN: Unable to get the compose_filepath for task', task_name)
-            return None
+            print('WARN: Unable to get the compose_filepath for the task', task_name)
+            print('WARN: will be used the current project output settings')
+            p = bpy.context.scene.render.frame_path()
+            compose_filepath = os.path.join(os.path.dirname(p), task_name + os.path.splitext(p)[-1]))
         out_path = bpy.path.abspath(compose_filepath)
     if not os.path.isabs(out_path):
         out_path = os.path.abspath(out_path)
-    if tempdir:
-        # Download to temp folder just to preview the task result
-        out_path = os.path.join(tempdir, task_name + os.path.splitext(out_path)[-1])
+    if result_dir:
+        # Used for preview or in manual download
+        out_path = os.path.join(result_dir, task_name + os.path.splitext(out_path)[-1])
 
     result = True
     checksum = None
