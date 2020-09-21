@@ -987,7 +987,10 @@ class BlendNetTaskDownloadOperation(bpy.types.Operator):
         wm = context.window_manager
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
-        result = BlendNet.addon.managerDownloadTaskResult(task_name, self.result)
+        # If the result is downloaded manually - use the current project output directory
+        out_dir = os.path.dirname(bpy.path.abspath(bpy.context.scene.frame_path()))
+        dir_path = os.path.join(out_dir, self.result)
+        result = BlendNet.addon.managerDownloadTaskResult(task_name, self.result, dir_path)
         if result is None:
             self.report({'WARNING'}, 'Unable to download the final result for %s, please retry later ' % (task_name,))
             return {'CANCELLED'}
