@@ -669,11 +669,18 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         if scene.cycles.use_square_samples:
             samples *= samples
 
+        # Where the compose result will be stored on the Addon side
+        compose_filepath = scene.render.frame_path()
+        if scene.render.filepath.startswith('//'):
+            # It's relative to blend project path
+            compose_filepath = bpy.path.relpath(compose_filepath)
+
         cfg = {
             'samples': samples,
             'frame': scene.frame_current,
             'project': fname,
             'use_compositing_nodes': scene.render.use_compositing,
+            'compose_filepath': compose_filepath,
         }
 
         if not BlendNet.addon.managerTaskConfig(self._task_name, cfg):
@@ -988,7 +995,7 @@ class BlendNetTaskDownloadOperation(bpy.types.Operator):
 
         task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
         # If the result is downloaded manually - use the current project output directory
-        out_dir = os.path.dirname(bpy.path.abspath(bpy.context.scene.frame_path()))
+        out_dir = os.path.dirname(bpy.context.scene.render.frame_path())
         dir_path = os.path.join(out_dir, self.result)
         result = BlendNet.addon.managerDownloadTaskResult(task_name, self.result, dir_path)
         if result is None:

@@ -506,7 +506,7 @@ def managerDownloadTaskResult(task_name, result_to_download, result_dir = None):
             print('WARN: Unable to get the compose_filepath for the task', task_name)
             print('WARN: will be used the current project output settings')
             p = bpy.context.scene.render.frame_path()
-            compose_filepath = os.path.join(os.path.dirname(p), task_name + os.path.splitext(p)[-1]))
+            compose_filepath = os.path.join(os.path.dirname(p), task_name + os.path.splitext(p)[-1])
         out_path = bpy.path.abspath(compose_filepath)
     if not os.path.isabs(out_path):
         out_path = os.path.abspath(out_path)

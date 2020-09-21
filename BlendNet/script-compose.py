@@ -44,16 +44,6 @@ if scene.render.is_movie_format:
     scene.render.image_settings.color_depth = '32'
     scene.render.image_settings.exr_codec = 'ZIP'
 
-# Return the compose_filepath variable
-compose_filepath = scene.render.frame_path()
-if scene.render.filepath.startswith('//'):
-    # It's relative to blend project path
-    compose_filepath = bpy.path.relpath(compose_filepath)
-    # Sometimes it's not recognized properly
-    if not compose_filepath.startswith('//'):
-        compose_filepath = '//' + compose_filepath
-print('INFO: Compose filepath: %s' % (compose_filepath,))
-
 # Set the output file
 filename = bpy.path.basename(scene.render.frame_path())
 scene.render.filepath = os.path.abspath(os.path.join(task.get('result_dir'), filename))
