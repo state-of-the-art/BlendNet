@@ -1,7 +1,8 @@
 bl_info = {
     'name': 'BlendNet - distributed cloud render',
     'author': 'www.state-of-the-art.io',
-    'version': (0, 3, 1),
+    'version': (0, 4, 0),
+    'warning': 'development version',
     'blender': (2, 80, 0),
     'location': 'Properties --> Render --> BlendNet Render',
     'description': 'Allows to easy allocate resources in cloud and '
