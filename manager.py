@@ -6,10 +6,6 @@ Description: REST interface for Manager
 Run: /srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 '''
 
-import signal
-import faulthandler
-faulthandler.register(signal.SIGUSR1)
-
 import os, sys
 sys.path.append(os.path.dirname(__file__))
 
