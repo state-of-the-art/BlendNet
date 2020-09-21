@@ -13,7 +13,6 @@ import hashlib # Confirm sha1 hash of the blob
 import threading # Using locks for multi-threading streaming
 import shutil # Useful recursive dir remove feature
 import re # Used to clean bad symbols for tmp files
-import platform # Used to identify whether running on Linux or Windows
 
 class FileCache:
     def __init__(self, path = None, name = None):
@@ -278,21 +277,11 @@ class FileCache:
 
     def getTotalSpace(self):
         '''Total cache space in bytes'''
-        if platform.system() == 'Windows':
-            _, used_bytes, _ = shutil.disk_usage(os.path.realpath(self._cache_dir))
-            return used_bytes
-        else:
-            res = os.statvfs(self._cache_dir)
-            return res.f_frsize * res.f_blocks
+        return shutil.disk_usage(self._cache_dir).total
 
     def getAvailableSpace(self):
         '''Available cache space in bytes'''
-        if platform.system() == 'Windows':
-            _, _, free_bytes = shutil.disk_usage(os.path.realpath(self._cache_dir))
-            return free_bytes
-        else:
-            res = os.statvfs(self._cache_dir)
-            return res.f_frsize * res.f_bavail
+        return shutil.disk_usage(self._cache_dir).free
 
     def workspaceCreate(self, name, files_map):
         '''Creating new workspace and link the provided files into'''
