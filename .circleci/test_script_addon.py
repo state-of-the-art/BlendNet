@@ -17,7 +17,7 @@ prefs.resource_provider = 'local'
 print('INFO: CI: Using provider:', prefs.resource_provider)
 
 prefs.manager_address = 'blendnet-manager-host' # Using presetup docker container DN
-prefs.manager_ca_path = '/srv/workspace/ca.crt'
+prefs.manager_ca_path = os.path.abspath('workspace/ca.crt')
 prefs.manager_user = 'None'
 prefs.manager_password = 'None'
 
