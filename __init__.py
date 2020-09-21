@@ -457,7 +457,8 @@ class BlendNetToggleManager(bpy.types.Operator):
                 return {'PASS_THROUGH'}
             self.report({'INFO'}, 'BlendNet Manager connected')
 
-        wm.event_timer_remove(self._timer)
+        if self._timer is not None:
+            wm.event_timer_remove(self._timer)
         wm.blendnet.status = 'idle'
         if context.area:
             context.area.tag_redraw()
@@ -640,7 +641,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
 
             # Slow down the check process
-            context.window_manager.event_timer_remove(self._timer)
+            if self._timer is not None:
+                context.window_manager.event_timer_remove(self._timer)
             self._timer = context.window_manager.event_timer_add(3.0, window=context.window)
 
         status = BlendNet.addon.managerTaskUploadFilesStatus()
@@ -700,7 +702,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         # Removing no more required temp blend file
         os.remove(self._project_file)
 
-        context.window_manager.event_timer_remove(self._timer)
+        if self._timer is not None:
+            context.window_manager.event_timer_remove(self._timer)
 
         return {'FINISHED'}
 
