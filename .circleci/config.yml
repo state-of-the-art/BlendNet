@@ -1,15 +1,27 @@
 version: 2.1
 
+orbs:
+  win: circleci/windows@2.4.0
+
 workflows:
   build_and_test:
     jobs:
       - build
       - blendnet_test:
           blender_version: "2.80" # The first one supported
+          requires:
+            - build
       - blendnet_test:
           blender_version: lts
+          requires:
+            - build
       - blendnet_test:
           blender_version: latest # Latest release available
+          requires:
+            - build
+      - blendnet_test_win:
+          requires:
+            - build
 
   nightly_test:
     triggers:
@@ -83,7 +95,6 @@ jobs:
           name: Run blendnet-agent-1
           background: true
           command: |
-            # Run Agent for max 10 minutes
             docker run --name blendnet-agent-1 -m 2G --rm -it \
                 --volumes-from blendnet-srv ubuntu:20.04 \
                 /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-1.log || true
@@ -98,7 +109,6 @@ jobs:
           name: Run blendnet-agent-2
           background: true
           command: |
-            # Run Agent for max 10 minutes
             docker run --name blendnet-agent-2 -m 2G --rm -it \
                 --volumes-from blendnet-srv ubuntu:20.04 \
                 /srv/workspace/test_run_service.sh agent 2>&1 | tee results/agent-2.log || true
@@ -118,7 +128,6 @@ jobs:
             # Wait for blendnet-agent-2 container
             while ! docker ps | grep blendnet-agent-2; do echo "waiting agent-2"; docker ps; sleep 1; done
 
-            # Run Manager for max 10 minutes
             docker run --name blendnet-manager -m 2G --rm -it \
                 --link blendnet-agent-1:blendnet-agent-1-host \
                 --link blendnet-agent-2:blendnet-agent-2-host \
@@ -160,6 +169,140 @@ jobs:
             docker rm -f blendnet-manager || true
             docker rm -f blendnet-executor || true
             docker rm -f blendnet-srv || true
+
+      # TODO: Add test results
+      #- store_test_results:
+      #    path: results/reports
+
+      - store_artifacts:
+          path: results
+          destination: results
+
+
+  blendnet_test_win:
+    executor:
+      name: win/default
+
+    steps:
+      - checkout:
+          path: blendnet
+
+      - run:
+          name: Preparing to the test execution
+          command: |
+            blendnet\.circleci\test_prepare.ps1
+
+            # Put addon to the proper place
+            mkdir -p scripts/addons
+            cp -r blendnet scripts/addons/
+            # Create the results dir
+            mkdir results
+          no_output_timeout: 5m
+
+      - run:
+          name: Run blendnet-agent-1
+          background: true
+          command: |
+            cp -r workspace agent-1
+            cd agent-1
+            echo '{"listen_host": "127.0.1.1"}' | Out-File -Encoding ASCII agent.json
+
+            ..\blender\blender.exe -b -noaudio -P ..\scripts\addons\blendnet\agent.py 2>&1 | tee -filepath ..\results\agent-1.log
+
+            cd ..
+            echo "Check exceptions in the log"
+            $result = cat results\agent-1.log | Select-String -Pattern '^Traceback'
+            if ($result -ne $null) {
+                echo "Found exceptions in the agent-1 log: $result"
+                exit 1
+            }
+            echo "Check errors in the log"
+            $result = cat results\agent-1.log | Select-String -Pattern '^ERROR: '
+            if ($result -ne $null) {
+                echo "Found errors in the agent-1 log: $result"
+                exit 2
+            }
+            $result = cat results\agent-1.log | Select-String -Pattern '^Fatal Python error: '
+            if ($result -ne $null) {
+                echo "Found errors in the agent-1 log: $result"
+                exit 3
+            }
+
+      - run:
+          name: Run blendnet-agent-2
+          background: true
+          command: |
+            cp -r workspace agent-2
+            cd agent-2
+            echo '{"listen_host": "127.0.1.2"}' | Out-File -Encoding ASCII agent.json
+
+            ..\blender\blender.exe -b -noaudio -P ..\scripts\addons\blendnet\agent.py 2>&1 | tee -filepath ..\results\agent-2.log
+
+            cd ..
+            echo "Check exceptions in the log"
+            $result = cat results\agent-2.log | Select-String -Pattern '^Traceback'
+            if ($result -ne $null) {
+                echo "Found exceptions in the agent-2 log: $result"
+                exit 1
+            }
+            echo "Check errors in the log"
+            $result = cat results\agent-2.log | Select-String -Pattern '^ERROR: '
+            if ($result -ne $null) {
+                echo "Found errors in the agent-2 log: $result"
+                exit 2
+            }
+            $result = cat results\agent-2.log | Select-String -Pattern '^Fatal Python error: '
+            if ($result -ne $null) {
+                echo "Found errors in the agent-2 log: $result"
+                exit 3
+            }
+
+      - run:
+          name: Run blendnet-manager
+          background: true
+          command: |
+            # Adding resolve paths for the agents
+            Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "127.0.1.1`tblendnet-agent-1-host" -Force
+            Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "127.0.1.2`tblendnet-agent-2-host" -Force
+
+            cp -r workspace manager
+            cd manager
+            ..\blender\blender.exe -b -noaudio -P ..\scripts\addons\blendnet\manager.py 2>&1 | tee -filepath ..\results\manager.log
+
+            cd ..
+            echo "Check exceptions in the log"
+            $result = cat results\manager.log | Select-String -Pattern '^Traceback'
+            if ($result -ne $null) {
+                echo "Found exceptions in the manager log: $result"
+                exit 1
+            }
+            echo "Check errors in the log"
+            $result = cat results\manager.log | Select-String -Pattern '^ERROR: '
+            if ($result -ne $null) {
+                echo "Found errors in the manager log: $result"
+                exit 2
+            }
+            $result = cat results\manager.log | Select-String -Pattern '^Fatal Python error: '
+            if ($result -ne $null) {
+                echo "Found errors in the manager log: $result"
+                exit 3
+            }
+
+      - run:
+          name: Run Addon test
+          command: |
+            Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "127.0.0.1`tblendnet-manager-host" -Force
+            blendnet\.circleci\test_execute_addon.ps1
+
+      - run:
+          name: Stop the running blender processes
+          when: always
+          command: |
+            # TODO: when BN-64 is completed - stop Manager and Agents properly
+            Stop-Process -Name "blender"
+            sleep 1
+            Stop-Process -Name "blender" -Force
+            sleep 10
 
       # TODO: Add test results
       #- store_test_results:
