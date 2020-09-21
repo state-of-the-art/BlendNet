@@ -26,6 +26,11 @@ class ManagerTaskConfig(TaskConfig):
             'type': bool,
             'default': True,
         }
+        self._defs['compose_filepath'] = {
+            'description': '''Where to place the task compose result on the Addon side''',
+            'type': str,
+            'default': None,
+        }
 
         super().__init__(parent)
 
@@ -201,23 +206,13 @@ class ManagerTask(TaskBase):
                 process = self.runBlenderScriptProcessor(ws_path, 'compose', cfg, blendfile=self._cfg.project)
                 outs = self._processOutputs(process, show_out=True)
 
-                # Find the compose filepath in the stdout
-                compose_filepath = None
-                for line in outs.decode().split('\n'):
-                    line = line.strip()
-                    if line.startswith('INFO: Compose filepath: '):
-                        compose_filepath = line.split('INFO: Compose filepath: ', 1)[-1]
-                        break
-                if not compose_filepath:
-                    print('ERROR: Unable to find the compose filepath in compose process output')
-
                 # Checking the result_dir and set the compose if the result file is here
                 for filename in os.listdir(os.path.join(ws_path, cfg['result_dir'])):
                     blob = self._parent._fc.blobStoreFile(os.path.join(ws_path, cfg['result_dir'], filename), True)
                     if not blob:
                         print('ERROR: Unable to store blob for compose result of "%s"' % self.name())
                         return
-                    self.statusComposeSet(blob['id'], compose_filepath or filename)
+                    self.statusComposeSet(blob['id'])
                     break
                 if not self._status['result']['compose']:
                     self.stateError({self.name(): 'Result file of the compose operation not found'})
@@ -497,9 +492,16 @@ class ManagerTask(TaskBase):
         with self._execution_lock:
             self._execution_watcher = None
 
-    def statusComposeSet(self, blob_id, filepath):
+    def status(self):
+        '''Returns the manager task status information'''
+        out = super().status()
+        out.update({
+            'compose_filepath': self._cfg.compose_filepath,
+        })
+        return out
+
+    def statusComposeSet(self, blob_id):
         with self._status_lock:
-            self._status['compose_filepath'] = filepath
             self._status['result']['compose'] = blob_id
 
     def _stop(self):
