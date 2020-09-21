@@ -96,8 +96,12 @@ class Manager(InstanceProvider):
             filename = 'agent-%s.json' % (hashlib.sha1(agent_name.encode('utf-8')).hexdigest(),)
             filepath = os.path.join(self._agents_dir, filename)
             if not agent_data:
-                if os.path.exists(filepath):
-                    os.remove(filepath)
+                try:
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                except Exception as e:
+                    # Could happen on Windows if file is used by some process
+                    print('ERROR: Unable to remove file:', str(e))
                 return
             with open(filepath, 'w') as f:
                 json.dump(agent_data, f)

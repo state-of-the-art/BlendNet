@@ -56,7 +56,7 @@ print('INFO: Compose filepath: %s' % (compose_filepath,))
 
 # Set the output file
 filename = bpy.path.basename(scene.render.frame_path())
-scene.render.filepath = os.path.join(task.get('result_dir'), filename)
+scene.render.filepath = os.path.abspath(os.path.join(task.get('result_dir'), filename))
 os.makedirs(bpy.path.abspath(task.get('result_dir')), mode=0o750, exist_ok=True)
 
 image_path = os.path.abspath(bpy.path.abspath(task.get('render_file_path')))
@@ -69,7 +69,14 @@ if not task.get('use_compositing_nodes'):
     print('DEBUG: Compositing is disabled, just converting the render image')
     if scene.render.image_settings.file_format == 'OPEN_EXR_MULTILAYER':
         print('WARN: Just move the render to compose due to blender bug T71087')
-        os.rename(image_path, bpy.path.abspath(scene.render.frame_path()))
+        # Windows will not just replace the file - so need to check if it's exist
+        try:
+            if os.path.exists(bpy.path.abspath(scene.render.frame_path())):
+                os.remove(bpy.path.abspath(scene.render.frame_path()))
+            os.rename(image_path, bpy.path.abspath(scene.render.frame_path()))
+        except Exception as e:
+            # Could happen on Windows if file is used by some process
+            print('ERROR: Unable to move file:', str(e))
         sys.exit(1)
 
     # Save the loaded image as render to convert

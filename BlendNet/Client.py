@@ -180,7 +180,11 @@ class ClientEngine:
                         raise urllib.error.URLError('Incorrect sha1 signature')
                     return sha1_calc.hexdigest(), req._out_path
             except:
-                os.remove(req._out_path)
+                try:
+                    os.remove(req._out_path)
+                except Exception as e:
+                    # Could happen on Windows if file is used by some process
+                    print('ERROR: Unable to remove file:', str(e))
                 raise
 
     def get(self, path):

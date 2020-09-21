@@ -183,8 +183,12 @@ class TaskExecutorBase(ABC):
             # Remove the snapshot file if existing
             filename = 'task-%s.json' % hashlib.sha1(name.encode('utf-8')).hexdigest()
             filepath = os.path.join(self._tasks_dir, filename)
-            if os.path.exists(filepath):
-                os.remove(filepath)
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception as e:
+                # Could happen on Windows if file is used by some process
+                print('ERROR: Unable to remove file:', str(e))
 
     def taskAddToPending(self, task):
         '''Put task object into the pending list'''
