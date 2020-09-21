@@ -170,9 +170,9 @@ class ManagerTask(TaskBase):
             if not self._results_to_remove:
                 return
             print('DEBUG: Running cleaning of %s result blobs' % len(self._results_to_remove))
-            for blob_id in self._results_to_remove:
-                self._parent._fc.blobRemove(blob_id)
-            self._results_to_remove.clear()
+            for blob_id in self._results_to_remove.copy():
+                if self._parent._fc.blobRemove(blob_id):
+                    self._results_to_remove.remove(blob_id)
 
         print('DEBUG: Merge clean completed for task "%s"' % (self.name(),))
 
@@ -208,6 +208,8 @@ class ManagerTask(TaskBase):
                     if line.startswith('INFO: Compose filepath: '):
                         compose_filepath = line.split('INFO: Compose filepath: ', 1)[-1]
                         break
+                if not compose_filepath:
+                    print('ERROR: Unable to find the compose filepath in compose process output')
 
                 # Checking the result_dir and set the compose if the result file is here
                 for filename in os.listdir(os.path.join(ws_path, cfg['result_dir'])):

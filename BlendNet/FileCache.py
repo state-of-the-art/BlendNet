@@ -138,21 +138,28 @@ class FileCache:
             return self._blobs_map[sha1].copy()
 
     def blobRemove(self, sha1):
-        '''Removes blob and metadata from disk'''
+        '''Removes blob and metadata from disk and returns True on success'''
         print('INFO: Removing blob "%s"' % sha1)
+        blob_dir = os.path.join(self._blobs_dir, sha1[0:2])
+        blob_path = os.path.join(blob_dir, sha1)
+        json_path = blob_path+'.json'
+
+        try:
+            if os.path.exists(blob_path):
+                os.remove(blob_path)
+            if os.path.exists(json_path):
+                os.remove(json_path)
+        except Exception as e:
+            # Could happen on Windows if file is used by some process
+            print('ERROR: Unable to remove blob file:', str(e))
+            return False
+
         with self._blobs_map_lock:
             if sha1 not in self._blobs_map:
                 return
             self._blobs_map.pop(sha1)
 
-        blob_dir = os.path.join(self._blobs_dir, sha1[0:2])
-        blob_path = os.path.join(blob_dir, sha1)
-        json_path = blob_path+'.json'
-
-        if os.path.exists(blob_path):
-            os.remove(blob_path)
-        if os.path.exists(json_path):
-            os.remove(json_path)
+        return True
 
     def cleanOldCache(self, size = None):
         '''Clean old blobs to free `size` of cache space'''
@@ -211,7 +218,11 @@ class FileCache:
             return sha1_calc.hexdigest(), tmp_path
         except Exception as e:
             self._receivedData(size_left)
-            os.remove(tmp_path)
+            try:
+                os.remove(tmp_path)
+            except Exception as e:
+                # Could happen on Windows if file is used by some process
+                print('ERROR: Unable to remove temp file:', str(e))
             return print('ERROR: Unable to receive stream due to exception: %s' % e)
 
     def blobStoreStream(self, stream, size, sha1, important = False):
@@ -235,7 +246,14 @@ class FileCache:
         blob_dir = os.path.join(self._blobs_dir, sha1[0:2])
         os.makedirs(blob_dir, 0o700, True)
         blob_path = os.path.join(blob_dir, sha1)
-        os.rename(received[1], blob_path)
+        try:
+            # Windows will not just replace the file - so need to check if it's exist
+            if os.path.exists(blob_path):
+                os.remove(blob_path)
+            os.rename(received[1], blob_path)
+        except Exception as e:
+            # Could happen on Windows if file is used by some process
+            print('ERROR: Unable to move file:', str(e))
 
         return self.blobUpdate(sha1, {
             'id': sha1,
@@ -267,7 +285,14 @@ class FileCache:
         blob_dir = os.path.join(self._blobs_dir, received[0][0:2])
         os.makedirs(blob_dir, 0o700, True)
         blob_path = os.path.join(blob_dir, received[0])
-        os.rename(received[1], blob_path)
+        try:
+            # Windows will not just replace the file - so need to check if it's exist
+            if os.path.exists(blob_path):
+                os.remove(blob_path)
+            os.rename(received[1], blob_path)
+        except Exception as e:
+            # Could happen on Windows if file is used by some process
+            print('ERROR: Unable to move file:', str(e))
 
         return self.blobUpdate(received[0], {
             'id': received[0],
