@@ -707,7 +707,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             scene.frame_current = self._frame_orig
 
         # Removing no more required temp blend file
-        os.remove(self._project_file)
+        if self._project_file and os.path.exists(self._project_file):
+            os.remove(self._project_file)
 
         if self._timer is not None:
             context.window_manager.event_timer_remove(self._timer)
