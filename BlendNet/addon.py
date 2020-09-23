@@ -278,7 +278,8 @@ def updateManagerTasks():
     '''Update cache and return the current manager tasks'''
     global manager_tasks_cache
 
-    tasks_prop = bpy.context.window_manager.blendnet.manager_tasks
+    bn = bpy.context.window_manager.blendnet
+    tasks_prop = bn.manager_tasks
 
     tasks = ManagerClient(getManagerIP(), getConfig()).tasks()
 
@@ -326,12 +327,16 @@ def updateManagerTasks():
             elif to_download[key].create_time > item.create_time:
                 item.received = 'skipped'
 
+    if to_rem and bn.manager_tasks_idx >= len(tasks_prop):
+        # Reset the selected task index if it is out of bounds
+        bn.manager_tasks_idx = len(tasks_prop) - 1
+
     for item in to_download.values():
         if item.received:
             continue
-        result = managerDownloadTaskResult(task_name, 'compose')
+        result = managerDownloadTaskResult(item.name, 'compose')
         if result == False:
-            print('INFO: Downloading the final render for %s...' % task_name)
+            print('INFO: Downloading the final render for %s...' % (item.name,))
             item.received = 'Downloading...'
         elif result != None:
             item.received = result
@@ -487,14 +492,16 @@ def _managerDownloadTaskResultsWorker(task, result, file_path):
             result, task, file_path, repeat
         ))
         time.sleep(1.0)
-    if ret:
-        print('DEBUG: Downloading of "%s" from task "%s" into "%s" completed' % (result, task, file_path))
-    else:
-        print('ERROR: Download error: %s' % (ret,))
     # Set the downloaded file path to the item received field
     for item in bpy.context.window_manager.blendnet.manager_tasks:
-        if item.name == task and result == 'compose' and item.received != 'skipped':
+        if item.name != task or result != 'compose' or item.received == 'skipped':
+            continue
+        if ret:
+            print('DEBUG: Downloading of "%s" from task "%s" into "%s" completed' % (result, task, file_path))
             item.received = file_path
+        else:
+            print('ERROR: Download error for task %s: %s' % (task, ret))
+            item.received = None
 
 def managerDownloadTaskResult(task_name, result_to_download, result_dir = None):
     '''Check the result existance and download if it's not matching the existing one'''
