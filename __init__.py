@@ -444,15 +444,15 @@ class BlendNetToggleManager(bpy.types.Operator):
             if not BlendNet.addon.isManagerStarted():
                 return {'PASS_THROUGH'}
             self.report({'INFO'}, 'BlendNet Manager started')
-            wm.blendnet.status = 'Manager ping...'
+            wm.blendnet.status = 'Manager connecting...'
             if context.area:
                 context.area.tag_redraw()
             BlendNet.addon.requestManagerInfo(context)
-        elif wm.blendnet.status == 'Manager stopping...':
+        elif wm.blendnet.status == 'Manager connecting...':
             if not BlendNet.addon.isManagerStopped():
                 return {'PASS_THROUGH'}
 
-        if wm.blendnet.status == 'Manager ping...':
+        if wm.blendnet.status == 'Manager connecting...':
             if not BlendNet.addon.requestManagerInfo(context):
                 return {'PASS_THROUGH'}
             self.report({'INFO'}, 'BlendNet Manager connected')
@@ -535,7 +535,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return True
+        return BlendNet.addon.isManagerActive()
 
     def _findRenderResultArea(self, context):
         for window in context.window_manager.windows:
@@ -558,11 +558,6 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         if bads:
             self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
             return {'CANCELLED'}
-
-        # Run the Manager if it's not started
-        if not BlendNet.addon.isManagerCreated() or BlendNet.addon.isManagerStopped():
-            if bpy.ops.blendnet.togglemanager.poll():
-                bpy.ops.blendnet.togglemanager('INVOKE_DEFAULT')
 
         # Saving project to the same directory
         try:
@@ -1296,8 +1291,15 @@ class BlendNetRenderPanel(bpy.types.Panel):
             box.label(text='ERROR: Provider init failed, check addon settings', icon='ERROR')
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
-            row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL').is_animation = False
-            row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
+            if BlendNet.addon.isManagerStarted():
+                row.operator('blendnet.runtask', text='Run Image Task', icon='RENDER_STILL').is_animation = False
+                row.operator('blendnet.runtask', text='Run Animation Tasks', icon='RENDER_ANIMATION').is_animation = True
+            elif prefs.resource_provider != 'local':
+                row.operator('blendnet.togglemanager', text='Run Manager instance', icon='ADD')
+            elif prefs.resource_provider == 'local':
+                split = row.split(factor=0.3)
+                split.label(text='Using Manager')
+                split.label(text='%s:%s' % (prefs.manager_address, prefs.manager_port))
         if BlendNet.addon.isManagerActive():
             box.template_list('TASKS_UL_list', '', wm.blendnet, 'manager_tasks', wm.blendnet, 'manager_tasks_idx', rows=1)
             split = box.split(factor=0.8)
@@ -1317,7 +1319,8 @@ class BlendNetManagerPanel(bpy.types.Panel):
         layout = self.layout
 
         layout.label(text='Manager')
-        layout.label(text='%s' % BlendNet.addon.getManagerStatus())
+        status = BlendNet.addon.getManagerStatus()
+        layout.label(text=status[0], icon=status[1])
         prefs = bpy.context.preferences.addons[__package__].preferences
         if prefs.resource_provider != 'local':
             layout.operator('blendnet.togglemanager', icon='ADD' if not BlendNet.addon.isManagerStarted() else 'X')

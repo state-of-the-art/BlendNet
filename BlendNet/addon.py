@@ -235,11 +235,11 @@ def getManagerIP(context = None):
 
 def getManagerStatus():
     if isManagerStarted():
-        return 'Active' if isManagerActive() else 'Started'
+        return ('Active', 'CHECKMARK') if isManagerActive() else ('Started', 'REC')
     elif isManagerStopped():
-        return 'Stopped'
+        return ('Stopped', 'PAUSE')
     else:
-        return 'Unavailable'
+        return ('Unavailable', 'X')
 
 def getStartedAgentsNumber(context = None):
     res = getResources(context)
