@@ -48,6 +48,12 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         update = lambda self, context: BlendNet.addon.selectProvider(self.resource_provider),
     )
 
+    blendnet_show_panel: BoolProperty(
+        name = 'Show BlendNet',
+        description = 'Show BlendNet render panel',
+        default = True,
+    )
+
     # Advanced
     blender_dist: EnumProperty(
         name = 'Blender dist',
@@ -206,6 +212,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
 
         # Provider
         box = layout.box()
+        row = box.row()
         split = box.split(factor=0.8)
         split.prop(self, 'resource_provider')
         info = BlendNet.addon.getProviderDocs(self.resource_provider).split('\n')
@@ -1276,8 +1283,12 @@ class BlendNetRenderPanel(bpy.types.Panel):
 
         box = layout.box()
         row = box.row()
-        row.label(text='BlendNet Render (%s)' % (prefs.resource_provider,))
+        split = row.split(factor=0.1)
+        split.prop(prefs, 'blendnet_show_panel', icon_only=True)
+        split.label(text='BlendNet Render (%s)' % (prefs.resource_provider,))
         row.label(text=context.window_manager.blendnet.status)
+        if not prefs.blendnet_show_panel:
+            return
         row = box.row()
         row.use_property_split = True
         row.use_property_decorate = False # No prop animation
@@ -1314,6 +1325,10 @@ class BlendNetManagerPanel(bpy.types.Panel):
     bl_region_type = 'WINDOW'
     bl_context = 'render'
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.preferences.addons[__package__].preferences.blendnet_show_panel
 
     def draw_header(self, context):
         layout = self.layout
@@ -1392,6 +1407,10 @@ class BlendNetAgentsPanel(bpy.types.Panel):
     bl_region_type = 'WINDOW'
     bl_context = 'render'
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.preferences.addons[__package__].preferences.blendnet_show_panel
 
     def draw_header(self, context):
         layout = self.layout
