@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '!BN-*'
+  pull_request:
+    paths:
+      - '*.py'
+      - 'BlendNet/**.py'
+      - '.github/**'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - name: Packing dist archive
+        run: blendnet/.github/scripts/build.sh
+
+      # TODO: run static tests
+      #- store_test_results:
+      #    path: results/reports
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist
+          path: results/dist/blendnet-*
+
+  blendnet_test_lin_280:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: '2.80' # Support starts with this version
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: results-test-280
+          path: results/**
+
+  blendnet_test_lin_lts:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: 'lts' # Long term support release
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: results-test-lts
+          path: results/**
+
+  blendnet_test_lin_latest:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: 'latest' # Latest release available
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: results-test-latest
+          path: results/**
+
+#  blendnet_test_win:
+#    runs-on: windows-latest
+#    needs: build
+#    timeout-minutes: 15
+#    defaults:
+#      run:
+#        shell: powershell
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v2
+#        with:
+#          path: blendnet
+#
+#      - uses: ./blendnet/.github/actions/blendnet-test-windows
+#        with:
+#          blender_version: '2.80' # Support starts with this version
+#
+#      - name: Save artifacts
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v2
+#        with:
+#          path: results/**
