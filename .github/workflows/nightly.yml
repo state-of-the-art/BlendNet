@@ -1,0 +1,67 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  blendnet_test_lin_280:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: '2.80' # Support starts with this version
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          path: results/**
+
+  blendnet_test_lin_lts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: 'lts' # Long term support release
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          path: results/**
+
+  blendnet_test_lin_latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: blendnet
+
+      - uses: ./blendnet/.github/actions/blendnet-test-linux
+        with:
+          blender_version: 'latest' # Latest release available
+
+      - name: Save artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          path: results/**

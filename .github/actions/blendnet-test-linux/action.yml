@@ -1,0 +1,38 @@
+name: BlendNet Test Linux
+description: Runs test on linux with the specified blender version
+inputs:
+  blender_version:
+    required: true
+    description: |
+      Blender version to use
+      * <version> - exact version you need
+      * lts    - latest available LTS version
+      * latest - latest available version
+runs:
+  using: composite
+  steps:
+    - name: Preparing to the test execution
+      shell: bash
+      run: |
+        $GITHUB_ACTION_PATH/test_prepare.sh "${{ inputs.blender_version }}"
+        # Creating the docker container to store the data
+        docker create -v /srv --name blendnet-srv alpine /bin/true
+        mkdir -p scripts/addons
+        cp -a blendnet scripts/addons
+        docker cp scripts blendnet-srv:/srv
+        docker cp blender blendnet-srv:/srv
+        docker cp workspace blendnet-srv:/srv
+        mkdir -p results
+
+    - name: Run Addon test
+      shell: bash
+      run: $GITHUB_ACTION_PATH/test_execute_addon.sh "${{ inputs.blender_version }}" || exit 1
+
+    - name: Run API test
+      shell: bash
+      run: $GITHUB_ACTION_PATH/test_execute_api.sh "${{ inputs.blender_version }}" || exit 1
+
+    - name: Clean
+      shell: bash
+      run: |
+        docker rm -f blendnet-srv || true
