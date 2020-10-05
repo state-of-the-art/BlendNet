@@ -4,20 +4,7 @@ from ..Workers import Workers
 import os
 import traceback
 import importlib
-
-modules = {}
-
-with os.scandir(os.path.dirname(__file__)) as it:
-    for entry in it:
-        if not entry.is_dir() or entry.name.startswith('__'):
-            continue
-        print('INFO: Found provider "%s"' % entry.name)
-        try:
-            modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
-        except Exception as e:
-            print('WARN: Unable to load "%s" provider due to init error: %s' % (entry.name, e))
-            #traceback.print_exc()
-            modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
+import platform
 
 __all__ = [
     'Processor',
@@ -25,34 +12,66 @@ __all__ = [
     'Agent',
 ]
 
+modules = {}
+modules_messages = {}
+
+with os.scandir(os.path.dirname(__file__)) as it:
+    for entry in it:
+        if not entry.is_dir() or entry.name.startswith('__'):
+            continue
+        print('INFO: Found provider "%s"' % entry.name)
+        modules[entry.name] = None
+
 selected_provider = 'local'
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
     if provider not in modules:
         raise Exception('Unable to set unknown provider "%s"' % provider)
+
+    # Check the provider is loaded or contains an error
+    if not modules.get(provider) or isinstance(modules.get(provider), str):
+        try:
+            modules[provider] = importlib.import_module('.'+provider, __package__)
+        except Exception as e:
+            print('WARN: Unable to load "%s" provider due to init error: %s' % (provider, e))
+            #traceback.print_exc()
+            modules[provider] = 'ERROR: Unable to load provider: %s' % (e,)
+
+    if isinstance(modules[provider], str):
+        print('WARN: Unable to select "%s" provider due to loading error: %s' % (provider, modules[provider]))
+        return
+
+    check = modules[provider].checkDependencies()
+    if isinstance(check, str):
+        print('WARN: Unable to select "%s" provider due to dependency error: %s' % (provider, check))
+        modules_messages[provider] = [check]
+        return
+    modules_messages[provider] = []
+
+    print('INFO: Importing base from "%s" provider' % (provider,))
+    global Processor, Manager, Agent
+    Processor = importlib.import_module('.Processor', '%s.%s' % (__package__, provider)).Processor
+    Manager = importlib.import_module('.Manager', '%s.%s' % (__package__, provider)).Manager
+    Agent = importlib.import_module('.Agent', '%s.%s' % (__package__, provider)).Agent
+
     global selected_provider
     selected_provider = provider
 
-for name, module in modules.items():
-    if name != 'local' and not isinstance(module, str) and module.checkLocation():
-        print('INFO: Importing base from "%s" provider' % name)
-        global Processor, Manager, Agent
-        Processor = importlib.import_module('.Processor', '%s.%s' % (__package__, name)).Processor
-        Manager = importlib.import_module('.Manager', '%s.%s' % (__package__, name)).Manager
-        Agent = importlib.import_module('.Agent', '%s.%s' % (__package__, name)).Agent
-        selectProvider(name)
-        break
-else:
-    print('INFO: Importing base from "local" provider')
-    from .local import Processor, Manager, Agent
+    return True
 
+def getProviderMessages(provider):
+    '''Returns messages happening in the provider module'''
+    return modules_messages.get(provider, [])
 
 def getProvidersDoc():
     '''Return map with {ident: (name, desc), ...} of the providers'''
     out = {}
     for ident, module in modules.items():
-        if isinstance(module, str):
+        if module is None:
+            out[ident] = (ident + ' - select to init provider', '')
+            continue
+        elif isinstance(module, str):
             out[ident] = (ident + ' - ERROR: unable to initialize', module)
             continue
         name, desc = module.__doc__.split('\n', 1)
@@ -60,13 +79,12 @@ def getProvidersDoc():
 
     return out
 
-def getGoodProvidersList():
+def isProviderGood(name):
     '''Return a list with provider identifiers if their deps are ok'''
-    return [name for name, module in modules.items()
-            if name != 'local' and not isinstance(module, str) and module.checkDependencies()] + ['local']
+    return modules[name] is not None and not isinstance(modules[name], str)
 
 def _execProviderFunc(func, default = {}, *args, **kwargs):
-    if not hasattr(modules[selected_provider], func):
+    if modules[selected_provider] is None or not hasattr(modules[selected_provider], func):
         return default
     try:
         return getattr(modules[selected_provider], func)(*args, **kwargs)
@@ -181,3 +199,21 @@ def getPrice(inst_type, cheap_multiplier):
 def getMinimalCheapPrice(inst_type):
     '''Finds the lowest available instance price and returns it'''
     return _execProviderFunc('getMinimalCheapPrice', -1.0, inst_type)
+
+def findPATHExec(executable):
+    '''Finds absolute path of the required executable'''
+    paths = os.environ['PATH'].split(os.pathsep)
+    extlist = {''}
+
+    if platform.system() == 'Windows':
+        extlist = set(os.environ['PATHEXT'].lower().split(os.pathsep))
+
+    for ext in extlist:
+        execname = executable + ext
+        for p in paths:
+            f = os.path.join(p, execname)
+            if os.path.isfile(f):
+                return f
+
+    return None
+    raise Exception('Unable to find the required binary "%s" in PATH - maybe it was not installed properly?' % (name,))

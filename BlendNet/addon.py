@@ -22,7 +22,7 @@ from .list_blender_versions import getBlenderVersions
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
-    print('DEBUG: selected provider: %s' % provider)
+    print('DEBUG: selecting provider:', provider)
     providers.selectProvider(provider)
 
 def getProvider():
@@ -108,23 +108,27 @@ def _runBackgroundWork(function, *args, **kwargs):
     thread.daemon = True
     thread.start()
 
-def getProvidersEnumItems():
+def getProvidersEnumItems(scene = None, context = None):
     '''Return the available providers list of tuples with ident, name and description for enumproperty items'''
     docs = providers.getProvidersDoc()
     return [(i, d[0], d[1]) for i, d in docs.items()]
 
 def getProviderDocs(provider):
-    '''Return the available providers list of tuples with ident, name and description for enumproperty items'''
+    '''Gets docs for specified provider'''
     docs = providers.getProvidersDoc()
     return docs.get(provider, (provider, 'No documentation provided'))[1]
 
+def getProviderMessages(provider):
+    '''Returns the list of messages for provider'''
+    return providers.getProviderMessages(provider)
+
 def getAddonDefaultProvider():
-    '''Will find the first available provider for addon and return its name'''
-    return providers.getGoodProvidersList()[0]
+    '''Will return the default provider'''
+    return 'local'
 
 def checkProviderIsGood(provider):
     '''Make sure current choosen provider is good enough'''
-    return provider in providers.getGoodProvidersList()
+    return providers.isProviderGood(provider)
 
 
 provider_info_cache = [{}, '', 0]

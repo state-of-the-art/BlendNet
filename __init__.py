@@ -44,7 +44,7 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
     resource_provider: EnumProperty(
         name = 'Provider',
         description = 'Engine to provide resources for rendering',
-        items = BlendNet.addon.getProvidersEnumItems(),
+        items = BlendNet.addon.getProvidersEnumItems,
         update = lambda self, context: BlendNet.addon.selectProvider(self.resource_provider),
     )
 
@@ -219,6 +219,11 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         for line in info:
             if line.startswith('Help: '):
                 split.operator('wm.url_open', text='How to setup', icon='HELP').url = line.split(': ', 1)[-1]
+
+        messages = BlendNet.addon.getProviderMessages(self.resource_provider)
+        for msg in messages:
+            box.label(text=msg, icon='ERROR')
+
         if not BlendNet.addon.checkProviderIsGood(self.resource_provider):
             err = BlendNet.addon.getProviderDocs(self.resource_provider).split('\n')
             for line in err:

@@ -1,6 +1,6 @@
 '''Amazon Web Services
 Provide API access to allocate required resources in AWS
-Dependencies: aws cli v2
+Dependencies: aws cli v2 installed and configured auth
 Help: https://github.com/state-of-the-art/BlendNet/wiki/HOWTO:-Setup-provider:-Amazon-Web-Services-(AWS)
 '''
 
@@ -58,9 +58,6 @@ def checkLocation():
     LOCATION = _requestMetadata('', True) is not None
     return LOCATION
 
-def checkDependencies():
-    return AWS_TOOL_PATH is not None
-
 def _executeAwsTool(*args, data=None):
     '''Runs the aws tool and returns code and data as tuple, data will be sent to stdin as bytes'''
     to_run = AWS_EXEC_PREFIX
@@ -85,29 +82,29 @@ def _executeAwsTool(*args, data=None):
 
     return data
 
-def findAWSTool():
+def initProvider():
     '''Finds absolute path of the aws tool'''
-    paths = os.environ['PATH'].split(os.pathsep)
-    executable = 'aws'
-    extlist = {''}
+    from .. import findPATHExec
+    tool_path = findPATHExec('aws')
+    if not tool_path:
+        return 'Unable to find "aws" in PATH - check the provider documentation and install the requirements'
 
-    if platform.system() == 'Windows':
-        extlist = set(os.environ['PATHEXT'].lower().split(os.pathsep))
+    print('INFO: Found aws tool:', tool_path)
 
-    for ext in extlist:
-        execname = executable + ext
-        for p in paths:
-            f = os.path.join(p, execname)
-            if os.path.isfile(f):
-                global AWS_TOOL_PATH, AWS_EXEC_PREFIX
-                AWS_TOOL_PATH = f
-                AWS_EXEC_PREFIX = (AWS_TOOL_PATH,) + AWS_EXEC_PREFIX
-                print('INFO: Found aws tool: ' + AWS_TOOL_PATH)
-                configs = _getConfigs()
-                if 'region' in configs:
-                    print('INFO: Set region for aws tool: ' + configs['region'])
-                    AWS_EXEC_PREFIX += ('--region', configs['region'])
-                return
+    global AWS_TOOL_PATH, AWS_EXEC_PREFIX
+    AWS_TOOL_PATH = tool_path
+    AWS_EXEC_PREFIX = (AWS_TOOL_PATH,) + AWS_EXEC_PREFIX
+    configs = _getConfigs()
+    if 'region' in configs:
+        print('INFO: Set region for aws tool: ' + configs['region'])
+        AWS_EXEC_PREFIX += ('--region', configs['region'])
+
+    return True
+
+def checkDependencies():
+    if not AWS_TOOL_PATH:
+        return initProvider()
+    return True
 
 def _getConfigs():
     '''Returns dict with aws tool configs'''
@@ -768,8 +765,6 @@ def getMinimalCheapPrice(inst_type):
     '''Will check the spot history and retreive the latest minimal price'''
     prices = _getZonesMinimalSpotPrice(inst_type).values()
     return min(prices) if prices else -1.0
-
-findAWSTool()
 
 from .Processor import Processor
 from .Manager import Manager
