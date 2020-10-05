@@ -61,23 +61,6 @@ def setGoogleCloudSdk(path):
 
     return False
 
-def findGoogleCloudSdk():
-    '''Will try to find the google cloud sdk home directory'''
-    # Windows doesn't use PATH to locate binary unless shell=True
-    result = subprocess.run(['gcloud', 'info'],
-                            shell=(platform.system() == 'Windows'),
-                            stdout=subprocess.PIPE)
-
-    if result.returncode != 0:
-        return
-    lines = result.stdout.decode('utf-8').split('\n')
-    for line in lines:
-        if not line.startswith('Installation Root: ['):
-            continue
-        path = line.strip()[:-1].lstrip('Installation Root: [')
-        if setGoogleCloudSdk(path):
-            return path
-
 def loadGoogleCloudSdk():
     print('DEBUG: Loading gcloud paths')
     sys.path.append('%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT)
@@ -87,8 +70,35 @@ def loadGoogleCloudSdk():
     # Init credentials and properties
     _getCreds()
 
+def initProvider():
+    '''Will try to find the google cloud sdk home directory'''
+    from .. import findPATHExec
+    tool_path = findPATHExec('gcloud')
+    if not tool_path:
+        return 'Unable to find "gcloud" in PATH - check the provider documentation and install the requirements'
+
+    print('INFO: Found gcloud tool:', tool_path)
+
+    result = subprocess.run([tool_path, 'info'], stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        return 'Error during execution of "gcloud" tool: '
+    lines = result.stdout.decode('utf-8').split('\n')
+
+    sdk_path = None
+    for line in lines:
+        if line.startswith('Installation Root: ['):
+            sdk_path = line.strip()[:-1].lstrip('Installation Root: [')
+            break
+    if sdk_path and setGoogleCloudSdk(sdk_path):
+        loadGoogleCloudSdk()
+        return True
+
+    return 'Unable to find Google Cloud SDK Installation Root path'
+
 def checkDependencies():
-    return GOOGLE_CLOUD_SDK_ROOT is not None
+    if not GOOGLE_CLOUD_SDK_ROOT:
+        return initProvider()
+    return True
 
 def _getCreds():
     if not GOOGLE_CLOUD_SDK_ROOT:
@@ -845,11 +855,6 @@ def getPrice(inst_type, cheap_multiplier):
             out_price += price * (inst_info['mem'] / 1024.0)
 
     return (out_price, out_currency)
-
-findGoogleCloudSdk()
-
-if GOOGLE_CLOUD_SDK_ROOT:
-    loadGoogleCloudSdk()
 
 from .Processor import Processor
 from .Manager import Manager
