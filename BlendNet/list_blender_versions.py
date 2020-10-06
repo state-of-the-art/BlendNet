@@ -3,11 +3,77 @@
 '''BlendNet module to check the available blender versions
 
 Used in Addon and build automation
-Usage: python3 list_blender_versions.py [[platform] <version>/lts/latest]
+Usage: python3 list_blender_versions.py [platform [<version>/lts/latest]]
 '''
 
+import os
 from urllib.request import urlopen
 from html.parser import HTMLParser
+import threading # Sync between threads needed
+try:
+    from .Workers import Workers
+except ImportError:
+    # In case loaded as a regular script
+    from Workers import Workers
+
+workers_out = {}
+workers_out_lock = threading.Lock()
+
+def _downloadWorker(url, ctx, req_version, req_platform):
+    if not url.endswith('.sha256'):
+        # Process directory list
+        parser = LinkHTMLParser()
+        with urlopen(url, timeout=5, context=ctx) as f:
+            parser.feed(f.read().decode())
+
+        # Processing links of the dirs
+        links = parser.links()
+        global workers
+        for link in links:
+            if link.endswith('.sha256'):
+                workers.add(url+link, ctx, req_version, req_platform)
+        workers.start()
+        return
+
+    # Process sha256 file data
+    # Getting the file and search for linux dist there
+    with urlopen(url, timeout=5, context=ctx) as f:
+        for line in f:
+            sha256, name = line.decode().strip().split()
+
+            # Check the required platform
+            if req_platform == 'lin' and ('-linux' not in name or '64.tar' not in name):
+                # blender-2.80-linux-glibc217-x86_64.tar.bz2
+                # blender-2.83.7-linux64.tar.xz
+                continue
+            elif req_platform == 'win' and '-windows64.zip' not in name:
+                # blender-2.80-windows64.zip
+                # blender-2.83.7-windows64.zip
+                continue
+            elif req_platform == 'mac' and '-macOS.dmg' not in name:
+                # blender-2.80-macOS.dmg
+                # blender-2.83.7-macOS.dmg
+                continue
+
+            # Check the full version equality
+            ver = name.split('-')[1]
+            if req_version not in {'lts', 'latest', None}:
+                if not ver == req_version:
+                    continue
+
+            global workers_out, workers_out_lock
+            with workers_out_lock:
+                workers_out[ver] = {
+                    'url': os.path.dirname(url)+'/'+name,
+                    'checksum': sha256,
+                }
+            print('INFO: found blender version: %s (%s %s)' % (ver, workers_out[ver]['url'], sha256))
+
+workers = Workers(
+    'Get the list of available Blender versions',
+    8,
+    _downloadWorker,
+)
 
 class LinkHTMLParser(HTMLParser):
     def __init__(self):
@@ -32,14 +98,12 @@ def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
     * req_version - what kind of version to use: strict version, 'lts' or 'latest'
     * req_platform - platform to find the right dist: 'lin', 'win' or 'mac'
     Returns a dict with {'<version>': {'url': '<dist_url>', 'checksum': '<sha256>'}}'''
-    out = {}
     mirrors = [
         'https://download.blender.org/release/',
         'https://mirror.clarkson.edu/blender/release/',
         'https://ftp.nluug.nl/pub/graphics/blender/release/',
     ]
     for url in mirrors:
-        out = {}
         try:
             # Getting the entry point of the mirror
             parser = LinkHTMLParser()
@@ -69,51 +133,17 @@ def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
                         continue # Skip if it's not the required version major.minor
                 dirs.append(l)
 
-            # Process the versions from latest to oldest
-            dirs.reverse()
-
             # Getting lists of the specific dirs
             for d in dirs:
-                with urlopen(url+d, timeout=5, context=ctx) as f:
-                    parser.feed(f.read().decode())
+                workers.add(url+d, ctx, req_version, req_platform)
+            workers.start()
+            workers.wait()
 
-                # Processing links of the dirs
-                links = parser.links()
-                # Process the versions from latest to oldest
-                links.reverse()
-                for l in links:
-                    if not l.endswith('.sha256'):
-                        continue
-                    # Getting the file and search for linux dist there
-                    with urlopen(url+d+l, timeout=5, context=ctx) as f:
-                        for line in f:
-                            sha256, name = line.decode().strip().split()
-
-                            # Check the required platform
-                            if req_platform == 'lin' and ('-linux' not in name or '64.tar' not in name):
-                                # blender-2.80-linux-glibc217-x86_64.tar.bz2
-                                # blender-2.83.7-linux64.tar.xz
-                                continue
-                            elif req_platform == 'win' and '-windows64.zip' not in name:
-                                # blender-2.80-windows64.zip
-                                # blender-2.83.7-windows64.zip
-                                continue
-                            elif req_platform == 'mac' and '-macOS.dmg' not in name:
-                                # blender-2.80-macOS.dmg
-                                # blender-2.83.7-macOS.dmg
-                                continue
-
-                            ver = name.split('-')[1]
-                            if req_version not in {'lts', 'latest', None}:
-                                if not ver == req_version:
-                                    continue # Check the full version equality
-                            out[ver] = {
-                                'url': url+d+name,
-                                'checksum': sha256,
-                            }
-                            print('INFO: found blender version: %s (%s %s)' % (ver, out[ver]['url'], sha256))
-                            if req_version:
-                                return out # Return just one found required version
+            if req_version in {'latest', 'lts'}:
+                # Getting the latest version - lts was already filtered
+                global workers_out
+                key = sorted(workers_out.keys())[-1]
+                workers_out = {key: workers_out[key]}
 
             # Don't need to check the other mirrors
             break
@@ -121,7 +151,7 @@ def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
         except Exception as e:
             print('WARN: unable to get mirror list for: %s %s' % (url, e))
 
-    return out
+    return workers_out
 
 
 if __name__ == '__main__':

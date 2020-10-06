@@ -49,7 +49,7 @@ class Workers(object):
                 with self._tasks_lock:
                     self._tasks_ended += 1
             except queue.Empty:
-                print('DEBUG: Workers "%s" worker thread completed' % self._name)
+                #print('DEBUG: Workers "%s" worker thread completed' % (self._name,))
                 break # Thread will stop if there is no tasks
 
     def start(self):
