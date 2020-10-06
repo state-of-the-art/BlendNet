@@ -17,6 +17,10 @@ LOCAL_RESOURCES = {'agents': {}}
 def getProviderInfo():
     return {}
 
+def checkDependencies():
+    '''No dependencies for the local provider'''
+    return True
+
 def getResources(session_id):
     '''Get the available resources from the Manager'''
     out = {

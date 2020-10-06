@@ -224,10 +224,12 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
         for msg in messages:
             box.label(text=msg, icon='ERROR')
 
-        if not BlendNet.addon.checkProviderIsGood(self.resource_provider):
+        if not BlendNet.addon.checkProviderIsSelected():
             err = BlendNet.addon.getProviderDocs(self.resource_provider).split('\n')
             for line in err:
                 box.label(text=line.strip(), icon='ERROR')
+            return
+
         if self.resource_provider != 'local':
             box = box.box()
             box.label(text='Collected cloud info:')
@@ -1299,12 +1301,13 @@ class BlendNetRenderPanel(bpy.types.Panel):
         row.use_property_decorate = False # No prop animation
         row.prop(bn, 'scene_memory_req', text='Render RAM (GB)')
 
+        if not BlendNet.addon.checkProviderIsSelected():
+            box.label(text='ERROR: Provider init failed, check addon settings', icon='ERROR')
+            return
         if not BlendNet.addon.checkAgentMemIsEnough():
             box.label(text='WARN: Agent does not have enough memory to render the scene', icon='ERROR')
         if not prefs.agent_use_cheap_instance:
             box.label(text='WARN: No cheap VMs available, check addon settings', icon='ERROR')
-        if not BlendNet.addon.checkProviderIsGood(prefs.resource_provider):
-            box.label(text='ERROR: Provider init failed, check addon settings', icon='ERROR')
         if context.scene.render.engine != __package__:
             row = box.row(align=True)
             if BlendNet.addon.isManagerStarted():
@@ -1333,7 +1336,7 @@ class BlendNetManagerPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.preferences.addons[__package__].preferences.blendnet_show_panel
+        return context.preferences.addons[__package__].preferences.blendnet_show_panel and BlendNet.addon.checkProviderIsSelected()
 
     def draw_header(self, context):
         layout = self.layout
@@ -1415,7 +1418,7 @@ class BlendNetAgentsPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.preferences.addons[__package__].preferences.blendnet_show_panel
+        return context.preferences.addons[__package__].preferences.blendnet_show_panel and BlendNet.addon.checkProviderIsSelected()
 
     def draw_header(self, context):
         layout = self.layout

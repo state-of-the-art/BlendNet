@@ -126,9 +126,10 @@ def getAddonDefaultProvider():
     '''Will return the default provider'''
     return 'local'
 
-def checkProviderIsGood(provider):
+def checkProviderIsSelected():
     '''Make sure current choosen provider is good enough'''
-    return providers.isProviderGood(provider)
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    return providers.isProviderSelected(prefs.resource_provider)
 
 
 provider_info_cache = [{}, '', 0]
