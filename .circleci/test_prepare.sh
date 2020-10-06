@@ -7,7 +7,7 @@ BLENDER_VERSION=$1
 ROOT=$(dirname "$0")/..
 
 # Find the required blender version
-python3 "${ROOT}/BlendNet/list_blender_versions.py" "${BLENDER_VERSION}" | tee /tmp/blender_versions.txt
+python3 "${ROOT}/BlendNet/list_blender_versions.py" 'lin' "${BLENDER_VERSION}" | tee /tmp/blender_versions.txt
 ver_line=$(grep '^DATA:' /tmp/blender_versions.txt | head -1)
 rm -f /tmp/blender_versions.txt
 version=$(echo "${ver_line}" | cut -d" " -f2)

@@ -3,7 +3,7 @@
 '''BlendNet module to check the available blender versions
 
 Used in Addon and build automation
-Usage: python4 list_blender_versions.py [<version>/lts/latest]
+Usage: python3 list_blender_versions.py [[platform] <version>/lts/latest]
 '''
 
 from urllib.request import urlopen
@@ -26,8 +26,12 @@ class LinkHTMLParser(HTMLParser):
         self._links = []
         return out
 
-def getBlenderVersions(ctx = None, req_version = None):
-    '''Returns a dict with {'<version>': {'url': '<dist_url>', 'checksum': '<sha256>'}}'''
+def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
+    '''
+    * ctx - SSL context to override the CA list
+    * req_version - what kind of version to use: strict version, 'lts' or 'latest'
+    * req_platform - platform to find the right dist: 'lin', 'win' or 'mac'
+    Returns a dict with {'<version>': {'url': '<dist_url>', 'checksum': '<sha256>'}}'''
     out = {}
     mirrors = [
         'https://download.blender.org/release/',
@@ -84,8 +88,21 @@ def getBlenderVersions(ctx = None, req_version = None):
                     with urlopen(url+d+l, timeout=5, context=ctx) as f:
                         for line in f:
                             sha256, name = line.decode().strip().split()
-                            if '-linux' not in name or '64.tar' not in name:
+
+                            # Check the required platform
+                            if req_platform == 'lin' and ('-linux' not in name or '64.tar' not in name):
+                                # blender-2.80-linux-glibc217-x86_64.tar.bz2
+                                # blender-2.83.7-linux64.tar.xz
                                 continue
+                            elif req_platform == 'win' and '-windows64.zip' not in name:
+                                # blender-2.80-windows64.zip
+                                # blender-2.83.7-windows64.zip
+                                continue
+                            elif req_platform == 'mac' and '-macOS.dmg' not in name:
+                                # blender-2.80-macOS.dmg
+                                # blender-2.83.7-macOS.dmg
+                                continue
+
                             ver = name.split('-')[1]
                             if req_version not in {'lts', 'latest', None}:
                                 if not ver == req_version:
@@ -94,7 +111,7 @@ def getBlenderVersions(ctx = None, req_version = None):
                                 'url': url+d+name,
                                 'checksum': sha256,
                             }
-                            print('INFO: found blender version: %s (%s %s)' % (ver, url, sha256))
+                            print('INFO: found blender version: %s (%s %s)' % (ver, out[ver]['url'], sha256))
                             if req_version:
                                 return out # Return just one found required version
 
@@ -109,8 +126,9 @@ def getBlenderVersions(ctx = None, req_version = None):
 
 if __name__ == '__main__':
     import sys
-    req_version = sys.argv[-1] if len(sys.argv) > 1 else None
-    print('INFO: Getting Blender versions with required one: "%s"' % (req_version,))
-    versions = getBlenderVersions(None, req_version)
+    req_platform = sys.argv[1] if len(sys.argv) > 1 else 'lin'
+    req_version = sys.argv[2] if len(sys.argv) > 2 else None
+    print('INFO: Getting Blender versions with required one: "%s" for platform %s' % (req_version, req_platform))
+    versions = getBlenderVersions(None, req_platform, req_version)
     for ver in versions:
         print('DATA:', ver, versions[ver]['checksum'], versions[ver]['url'])
