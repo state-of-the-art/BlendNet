@@ -79,9 +79,9 @@ def getProvidersDoc():
 
     return out
 
-def isProviderGood(name):
+def isProviderSelected(name):
     '''Return a list with provider identifiers if their deps are ok'''
-    return modules[name] is not None and not isinstance(modules[name], str)
+    return selected_provider == name
 
 def _execProviderFunc(func, default = {}, *args, **kwargs):
     if modules[selected_provider] is None or not hasattr(modules[selected_provider], func):
