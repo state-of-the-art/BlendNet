@@ -130,6 +130,7 @@ class Manager(TaskExecutorBase, providers.Manager):
             'session_id': self._cfg.session_id,
             'dist_url': self._cfg.dist_url,
             'dist_checksum': self._cfg.dist_checksum,
+            'provider': providers.getSelectedProvider(),
             'bucket': self._cfg.bucket,
             'instance_type': self._cfg.agent_instance_type,
             'use_cheap_instance': self._cfg.agent_use_cheap_instance,

@@ -9,17 +9,30 @@ Run: /srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 import os, sys
 sys.path.append(os.path.dirname(__file__))
 
+from BlendNet import providers
+
+# TODO: allow even basic config change - restart the http server if its configs changed
+conf = {}
+if os.path.exists('manager.json'):
+    with open('manager.json', 'r') as f:
+        import json
+        conf = json.load(f)
+
+# Select the required provider, local by default
+providers.selectProvider(conf.get('provider', 'local'))
+
+
 from BlendNet import (
     disable_buffering,
-    Manager,
     SimpleREST,
     Server,
-    providers,
+    Manager,
 )
+#loadManager()
 
 class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
-        super().__init__(Manager(conf), prefix)
+        super().__init__(Manager.Manager(conf), prefix)
 
     @SimpleREST.get('resources')
     def resources(self, req = None):
@@ -44,13 +57,6 @@ class Processor(Server.Processor):
 
         return { 'success': True, 'message': 'Got agent log', 'data': data }
 
-
-# TODO: allow even basic config change - restart the http server if its configs changed
-conf = {}
-if os.path.exists('manager.json'):
-    with open('manager.json', 'r') as f:
-        import json
-        conf = json.load(f)
 
 SimpleREST.generateCert(conf.get('instance_name', 'blendnet-manager'), 'server')
 httpd = SimpleREST.HTTPServer((conf.get('listen_host', ''), conf.get('listen_port', 8443)), __doc__.split('\n')[0], [Processor(conf)])

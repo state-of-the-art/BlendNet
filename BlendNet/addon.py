@@ -71,6 +71,7 @@ def getConfig():
     cfg['session_id'] = prefs.session_id
     cfg['dist_url'] = prefs.blender_dist_url
     cfg['dist_checksum'] = prefs.blender_dist_checksum
+    cfg['provider'] = prefs.resource_provider
     if prefs.resource_provider != 'local':
         cfg['bucket'] = providers.getBucketName(cfg['session_id'])
 
@@ -129,7 +130,7 @@ def getAddonDefaultProvider():
 def checkProviderIsSelected():
     '''Make sure current choosen provider is good enough'''
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
-    return providers.isProviderSelected(prefs.resource_provider)
+    return providers.getSelectedProvider() == prefs.resource_provider
 
 
 provider_info_cache = [{}, '', 0]
