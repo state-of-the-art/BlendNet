@@ -462,7 +462,7 @@ class BlendNetToggleManager(bpy.types.Operator):
             if context.area:
                 context.area.tag_redraw()
             BlendNet.addon.requestManagerInfo(context)
-        elif wm.blendnet.status == 'Manager connecting...':
+        elif wm.blendnet.status == 'Manager stopping...':
             if not BlendNet.addon.isManagerStopped():
                 return {'PASS_THROUGH'}
 
