@@ -130,14 +130,16 @@ def _getConfigs():
             'zone': props.compute.zone.Get(),
         }
 
-        if checkLocation():
-            # Get defaults from metadata if they are not set
+        # Get defaults from metadata if they are not set
+        try:
             if not configs['project']:
                 configs['project'] = _requestMetadata('project/project-id')
             if not configs['zone']:
                 configs['zone'] = _requestMetadata('instance/zone').rsplit('/', 1)[1]
             if not configs['region']:
                 configs['region'] = configs['zone'].rsplit('-', 1)[0]
+        except Exception as e:
+            print('DEBUG: Failed update config from metadata:', e)
 
         GOOGLE_CLOUD_SDK_CONFIGS = configs
 
