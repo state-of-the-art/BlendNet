@@ -49,7 +49,7 @@ def _requestMetadata(path, verbose = False):
         return None
 
 def checkLocation():
-    '''Returns True if it's the GCP environment'''
+    '''Returns True if it's the AWS environment'''
     global LOCATION
 
     if LOCATION is not None:
