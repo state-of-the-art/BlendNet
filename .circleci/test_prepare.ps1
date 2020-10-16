@@ -34,7 +34,7 @@ openssl\openssl.exe req -x509 -nodes -newkey rsa:4096 `
 cp workspace\server.crt workspace\ca.crt
 
 echo "Download the test project"
-$disturl = 'https://github.com/state-of-the-art/BlendNet/wiki/files/blendnet-test-project-2.82-v0.3.zip'
+$disturl = 'https://github.com/state-of-the-art/BlendNet-test-project/archive/v2.82-v0.4.zip'
 $wc.DownloadFile($disturl, "test-project-dist.zip")
 echo "Unpack dist..."
 Expand-Archive test-project-dist.zip

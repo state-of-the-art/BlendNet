@@ -28,6 +28,12 @@ print('INFO: CI: Setup scene')
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
 
+# Override the absolute path of the used images
+for img in bpy.data.images:
+    img.filepath = img.filepath.replace(
+            '/home/user/Work/state-of-the-art/BlendNet-test-project',
+            os.path.abspath(bpy.path.abspath('//..')), 1)
+
 # Set the number of samples to CI level
 scene.cycles.samples = 23
 scene.cycles.aa_samples = 23

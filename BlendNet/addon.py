@@ -355,6 +355,7 @@ manager_info_cache = [{}, 0]
 def getManagerInfo():
     '''Update cache and return the current manager info'''
     # TODO: Not multithread for now - need to add locks
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
     global manager_info_cache, manager_info_timer
 
     if manager_info_timer:
@@ -369,8 +370,12 @@ def getManagerInfo():
         # Update tasks if info is here
         updateManagerTasks()
 
-    manager_info_timer = threading.Timer(5.0, getManagerInfo)
-    manager_info_timer.start()
+    if prefs.blendnet_show_panel:
+        # Do not need to loop through update if the panel is hidden
+        manager_info_timer = threading.Timer(5.0, getManagerInfo)
+        manager_info_timer.start()
+    else:
+        manager_info_timer = None
 
     return manager_info_cache[0]
 

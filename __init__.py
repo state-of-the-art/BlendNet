@@ -568,7 +568,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             return {'CANCELLED'}
 
         # Fix and verify the blendfile dependencies
-        bads = blend_file.getDependencies()[1]
+        bads = blend_file.getDependencies(bpy.path.abspath('//'), os.path.abspath(''))[1]
         if bads:
             self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % (bads,))
             return {'CANCELLED'}
@@ -637,13 +637,13 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
 
             # Prepare list of files need to be uploaded
-            deps, bads = blend_file.getDependencies()
+            deps, bads = blend_file.getDependencies(bpy.path.abspath('//'), os.path.abspath(''))
             if bads:
-                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run:', bads)
+                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % (bads,))
                 return {'CANCELLED'}
 
             deps_map = dict([ (rel, bpy.path.abspath(rel)) for rel in deps ])
-            deps_map[bpy.data.filepath] = self._project_file
+            deps_map['//'+fname] = self._project_file
 
             # Run the dependencies upload background process
             BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
@@ -689,8 +689,8 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             'project': fname,
             'use_compositing_nodes': scene.render.use_compositing,
             'compose_filepath': compose_filepath,
-            'path': bpy.path.abspath('//'), # To resolve the project parent paths `//../..`
-            'cwd': os.path.abspath(''), # Current working directory to resolve relative paths `../dir/file.txt`
+            'project_path': bpy.path.abspath('//'), # To resolve the project parent paths like `//../..`
+            'cwd_path': os.path.abspath(''), # Current working directory to resolve relative paths like `../dir/file.txt`
         }
 
         if not BlendNet.addon.managerTaskConfig(self._task_name, cfg):
