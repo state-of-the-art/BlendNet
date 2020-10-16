@@ -38,15 +38,15 @@ cp -a "${ROOT}/.github/actions/blendnet-test-linux/test_run_service.sh" workspac
 cp -a "${ROOT}/.github/scripts/test_script_addon.py" workspace
 
 # Download the test project
-testproject_url='https://github.com/state-of-the-art/BlendNet/wiki/files/blendnet-test-project'
+testproject_url='https://github.com/state-of-the-art/BlendNet-test-project/archive/'
 # (not perfect but simple & working for current CI)
 if [ "${BLENDER_VERSION}" = '2.80' ]; then
-    testproject_url="${testproject_url}-2.80"
+    testproject_url="${testproject_url}v2.80"
 else
-    testproject_url="${testproject_url}-2.82"
+    testproject_url="${testproject_url}v2.82"
 fi
-testproject_url="${testproject_url}-v0.3.zip"
+testproject_url="${testproject_url}-v0.4.zip"
 
 curl -fLo test-project.zip "${testproject_url}"
 unzip -d workspace test-project.zip
-mv workspace/blendnet-test-project* workspace/test-project
+mv workspace/BlendNet-test-project* workspace/test-project

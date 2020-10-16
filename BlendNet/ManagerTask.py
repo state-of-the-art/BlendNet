@@ -198,6 +198,8 @@ class ManagerTask(TaskBase):
                 'frame': self._cfg.frame,
                 'render_file_path': 'project/' + render_name + '.exr',
                 'result_dir': render_name + '-result',
+                'project_path': self._cfg.project_path,
+                'cwd_path': self._cfg.cwd_path,
             }
             print('DEBUG: Files to use in workspace:')
             for path in sorted(files_map):

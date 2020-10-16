@@ -16,7 +16,7 @@ $results_dir = 'results\addon'
 mkdir -p $results_dir
 
 $env:BLENDER_USER_SCRIPTS = "$pwd\scripts"
-blender\blender.exe -b -noaudio test-project\test-project.blend -P blendnet\.circleci\test_script_addon.py 2>&1 | tee -filepath "$results_dir\addon.log"
+blender\blender.exe -b -noaudio test-project\proj\test-project.blend -P blendnet\.circleci\test_script_addon.py 2>&1 | tee -filepath "$results_dir\addon.log"
 
 $remote_file = cat "$results_dir\addon.log" | Select-String -Pattern '^DATA: CI: ' | ForEach-Object { $_.ToString().split(' ', 3)[-1] }
 if ($remote_file -eq $null) {

@@ -16,7 +16,7 @@ apt install --no-install-recommends -y libxrender1 libxi6 libgl1
 
 if [ "${SVC}" = "addon" ]; then
     export BLENDER_USER_SCRIPTS=/srv/scripts
-    /srv/blender/blender -b -noaudio test-project/test-project.blend -P /srv/workspace/test_script_addon.py
+    /srv/blender/blender -b -noaudio test-project/proj/test-project.blend -P /srv/workspace/test_script_addon.py
 else
     /srv/blender/blender -b -noaudio -P /srv/scripts/addons/blendnet/${SVC}.py
 fi

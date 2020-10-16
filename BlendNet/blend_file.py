@@ -15,43 +15,40 @@ except ImportError:
     # In case loaded as a regular script
     import utils
 
-def getDependencies(project_path = None, cwd_path = None):
+def getDependencies(project_path, cwd_path, change = False):
     '''Will return good and bad set of file dependencies'''
     # * project_path - absolute path to the project on the client system
     # * cwd_path - absolute path to the current working directory on the client system
-    good, bad = checkImages(project_path, cwd_path)
+    # * change - replace the path in blend project with the changed one
+    good, bad = checkImages(project_path, cwd_path, change)
 
-    data = checkCaches(project_path, cwd_path)
+    data = checkCaches(project_path, cwd_path, change)
     good = good.union(data[0])
     bad = bad.union(data[1])
 
     return good, bad
 
-def fixPath(path, project_path, cwd_path):
+def fixPath(path, project_path, cwd_path, change):
     '''Will make sure the path is properly formatted'''
     newpath = path
-    if project_path or cwd_path:
-        # Make sure the blend file path is absolute for further processing
-        if newpath.startswith('//') and project_path:
-            # Convert the project (starts with '//') paths - they could
-            # contain parent dir usage, so need to ensure it's ok
-            newpath = utils.resolvePath(os.path.join(project_path, newpath[2:]))
-        elif not utils.isPathAbsolute(newpath) and cwd_path:
-            # Looks like relative path to the cwd - so making it
-            newpath = utils.resolvePath(os.path.join(cwd_path, newpath))
+    # Make sure the blend file path is absolute for further processing
+    if newpath.startswith('//') and project_path:
+        # Convert the project (starts with '//') paths - they could
+        # contain parent dir usage, so need to ensure it's ok
+        newpath = utils.resolvePath(os.path.join(project_path, newpath[2:]))
+    elif not utils.isPathAbsolute(newpath) and cwd_path:
+        # Looks like relative path to the cwd - so making it
+        newpath = utils.resolvePath(os.path.join(cwd_path, newpath))
 
-        print('DEBUG: Processed to absolute path:', path, newpath)
-
-        # Now the path is absolute and we can modify it to the actual path
-        if newpath.startswith(project_path):
-            newpath = newpath.replace(project_path, '/', 1)
-        else:
-            newpath = '//../ext_deps/' + newpath.replace(':', '_')
-        print('DEBUG: Result path:', path, newpath)
+    # Now the path is absolute and we can modify it to the actual path
+    if newpath.startswith(project_path):
+        newpath = '//' + newpath.replace(project_path, '', 1).lstrip('/')
+    elif change:
+        newpath = '//../ext_deps/' + newpath.replace(':', '_').lstrip('/')
 
     return newpath
 
-def checkImages(project_path, cwd_path):
+def checkImages(project_path, cwd_path, change):
     '''Will go through images, check they are existing and return good and bad set of files'''
     good = set()
     bad = set()
@@ -60,19 +57,19 @@ def checkImages(project_path, cwd_path):
         if i.packed_file or i.source != 'FILE':
             continue
 
-        path = fixPath(i.filepath, project_path, cwd_path)
+        path = fixPath(i.filepath, project_path, cwd_path, change)
         if not os.path.isfile(bpy.path.abspath(path)):
             print('ERROR: Unable to locate the image file:', path)
             bad.add(i.filepath)
             continue
-        if project_path or cwd_path:
+        if change:
             i.filepath = path
 
         good.add(path)
 
     return good, bad
 
-def checkCaches(project_path, cwd_path):
+def checkCaches(project_path, cwd_path, change):
     '''Will go through caches, check they are existing and return good and bad set of files'''
     scene = bpy.context.scene
 
@@ -90,15 +87,15 @@ def checkCaches(project_path, cwd_path):
 
             if mod.type == 'FLUID' and mod.fluid_type == 'DOMAIN':
                 # New mantaflow added in 2.82
-                cachedir = fixPath(bpy.path.abspath(mod.domain_settings.cache_directory), project_path, cwd_path)
+                cachedir = fixPath(mod.domain_settings.cache_directory, project_path, cwd_path, change)
                 if not os.path.isdir(bpy.path.abspath(cachedir)):
                     print('ERROR: Unable to locate the cachedir "%s" for object modifier %s --> %s' %
                             (mod.domain_settings.cache_directory, o.name, mod.name))
                     bad.add(cachedir)
                     continue
 
-                if project_path or cwd_path:
-                    mod.domain_settings.cache_directory = fixPath(cachedir, project_path, cwd_path)
+                if change:
+                    mod.domain_settings.cache_directory = cachedir
 
                 def _fmt(ext_type):
                     return {
@@ -158,7 +155,7 @@ def checkCaches(project_path, cwd_path):
 
                 print('DEBUG: Expecting files:', files)
                 for f in files:
-                    cpath = fixPath(os.path.join(cachedir, f), project_path, cwd_path)
+                    cpath = os.path.join(cachedir, f)
                     if not os.path.isfile(bpy.path.abspath(cpath)):
                         print('ERROR: Unable to locate fluid cache file '
                               '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
@@ -170,7 +167,7 @@ def checkCaches(project_path, cwd_path):
                 # so it's hard to determine right now, let's use just glob to find related
                 files_additional = glob.glob(os.path.join(cachedir, '**/*_%04d.*' % (scene.frame_current,)))
                 for cpath in files_additional:
-                    cpath = fixPath(cpath, project_path, cwd_path)
+                    cpath = fixPath(cpath, project_path, cwd_path, change)
                     if cpath not in good:
                         print('INFO: Found an additional fluid cache file:', cpath)
                         good.add(cpath)
@@ -179,15 +176,15 @@ def checkCaches(project_path, cwd_path):
 
             elif mod.type == 'FLUID_SIMULATION' and mod.settings.type in ('DOMAIN', 'PARTICLE'):
                 # Deprecated in blender >= 2.82
-                cachedir = fixPath(bpy.path.abspath(mod.settings.filepath), project_path, cwd_path)
+                cachedir = fixPath(mod.settings.filepath, project_path, cwd_path, change)
                 if not os.path.isdir(bpy.path.abspath(cachedir)):
                     print('ERROR: Unable to find the cachedir "%s" for object modifier %s --> %s' %
                             (mod.settings.filepath, o.name, mod.name))
                     bad.add(mod.settings.filepath)
                     continue
 
-                if project_path or cwd_path:
-                    mod.settings.filepath = fixPath(cachedir, project_path, cwd_path)
+                if change:
+                    mod.settings.filepath = cachedir
 
                 files = None
                 if mod.settings.type == 'DOMAIN':
@@ -202,7 +199,7 @@ def checkCaches(project_path, cwd_path):
                 else:
                     continue
                 for f in files:
-                    cpath = fixPath(os.path.join(cachedir, f), project_path, cwd_path)
+                    cpath = os.path.join(cachedir, f)
                     if not os.path.isfile(bpy.path.abspath(cpath)):
                         print('ERROR: Unable to locate fluid sim cache file '
                               '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))
@@ -242,7 +239,7 @@ def checkCaches(project_path, cwd_path):
                 else:
                     fname = '%s_%06d%s' % (fname, scene.frame_current, ext)
 
-                cpath = fixPath(os.path.join(localdir, pointcache_dir, fname), project_path, cwd_path)
+                cpath = fixPath(os.path.join('//', pointcache_dir, fname), project_path, cwd_path, change)
                 if not os.path.isfile(bpy.path.abspath(cpath)):
                     print('ERROR: Unable to locate pointcache file '
                           '"%s" for object modifier %s --> %s' % (cpath, o.name, mod.name))

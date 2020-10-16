@@ -94,7 +94,7 @@ class ClientEngine:
         if self._ca:
             return True
 
-        print('DEBUG: Trying to get CA certificate from the bucket')
+        print('DEBUG: Getting the CA certificate')
         self._ca = providers.downloadDataFromBucket(self._cfg.get('bucket', ''), 'ca.crt')
         if not self._ca:
             return False

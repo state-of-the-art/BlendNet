@@ -23,12 +23,12 @@ class TaskConfig(Config):
             'description': '''Set the project file will be used to render''',
             'type': str,
         },
-        'path': {
+        'project_path': {
             'description': '''Absolute path to the project dir, required to resolve `//../dir/file`''',
             'type': str,
             'validation': lambda cfg, val: utils.isPathAbsolute(val) and utils.isPathStraight(val),
         },
-        'cwd': {
+        'cwd_path': {
             'description': '''Absolute path to the current working dir, required to resolve `dir/file`''',
             'type': str,
             'validation': lambda cfg, val: utils.isPathAbsolute(val) and utils.isPathStraight(val),
@@ -272,7 +272,7 @@ class TaskBase(ABC):
             if not utils.isPathStraight(p):
                 print('ERROR: Path is not straight:', p)
                 return False
-            if not self._cfg.path or not self._cfg.cwd:
+            if not self._cfg.project_path or not self._cfg.cwd_path:
                 # The required configs are not set - skipping fix
                 return None
 
@@ -280,10 +280,10 @@ class TaskBase(ABC):
                 new_p = p
                 if p.startswith('//'):
                     # Project-based file
-                    new_p = self._cfg.path + p[2:].lstrip('/')
+                    new_p = self._cfg.project_path + p[2:].lstrip('/')
                 else:
                     # Relative path to CWD
-                    new_p = self._cfg.cwd + p.lstrip('/')
+                    new_p = self._cfg.cwd_path + p.lstrip('/')
                 with self._files_lock:
                     self._files[new_p] = self._files.pop(p)
         return True
@@ -377,10 +377,10 @@ class TaskBase(ABC):
             return print('WARN: Unable to change the task once started')
 
         # Make sure the paths will be properly set
-        if configs.get('path'):
-            configs['path'] = configs['path'].replace('\\', '/').rstrip('/') + '/'
-        if configs.get('cwd'):
-            configs['cwd'] = configs['cwd'].replace('\\', '/').rstrip('/') + '/'
+        if configs.get('project_path'):
+            configs['project_path'] = configs['project_path'].replace('\\', '/').rstrip('/') + '/'
+        if configs.get('cwd_path'):
+            configs['cwd_path'] = configs['cwd_path'].replace('\\', '/').rstrip('/') + '/'
 
         return self._cfg.configsSet(configs)
 
@@ -410,8 +410,8 @@ class TaskBase(ABC):
         new_files_map = {}
         for path in files_map:
             p = ''
-            if path.startswith(self._cfg.path):
-                p = path.replace(self._cfg.path, 'project/', 1)
+            if path.startswith(self._cfg.project_path):
+                p = path.replace(self._cfg.project_path, 'project/', 1)
             elif utils.isPathAbsolute(path):
                 # Windows don't like colon and other spec symbols in the path
                 p = 'ext_deps' + '/' + path.replace(':', '_')
