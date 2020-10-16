@@ -49,7 +49,7 @@ done
 
 # Configure the task (render-ci and compose-ci uses 23 samples)
 docker exec blendnet-executor curl --user 'None:None' --insecure --silent -X PUT \
-    -d '{"samples": 23, "project": "test-project.blend", "frame": 32}' \
+    -d '{"samples": 23, "project": "test-project.blend", "frame": 32, "path": "/", "cwd": "/"}' \
     "https://blendnet-manager-host:8443/api/v1/task/test-task-1/config"
 
 # Run the task execution
