@@ -280,10 +280,10 @@ class TaskBase(ABC):
                 new_p = p
                 if p.startswith('//'):
                     # Project-based file
-                    new_p = self._cfg.path + ('' if self._cfg.path.endswith('/') else '/') + p[2:]
+                    new_p = self._cfg.path + p[2:].lstrip('/')
                 else:
                     # Relative path to CWD
-                    new_p = self._cfg.cwd + ('' if self._cfg.cwd.endswith('/') else '/') + p
+                    new_p = self._cfg.cwd + p.lstrip('/')
                 with self._files_lock:
                     self._files[new_p] = self._files.pop(p)
         return True
@@ -376,8 +376,13 @@ class TaskBase(ABC):
         if not self.canBeChanged():
             return print('WARN: Unable to change the task once started')
 
-        self._cfg.configsSet(configs)
-        return True
+        # Make sure the paths will be properly set
+        if configs.get('path'):
+            configs['path'] = configs['path'].replace('\\', '/').rstrip('/') + '/'
+        if configs.get('cwd'):
+            configs['cwd'] = configs['cwd'].replace('\\', '/').rstrip('/') + '/'
+
+        return self._cfg.configsSet(configs)
 
     def configsGet(self):
         '''Get all the set configs'''

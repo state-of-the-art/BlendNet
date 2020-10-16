@@ -135,7 +135,7 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
     def put_task_file(self, req, parts):
         '''Upload file required to execute task'''
         # The cross-system paths are a pain. In blender we have 3 types (including '//'), so the rules are:
-        # * Path delimiter is always '/'. Backslash '\' is for escaping only
+        # * Path delimiter is always '/'. Backslash '\' will be converted to '/'
         # * The path should be straight and can't contain '/../' (parent dir usage)
         # * Relative paths (dir/file.txt) will be transformed with 'cwd' to absolute path during config
         # * Project paths (//something) will be transformed with 'path' to absolute path during config
@@ -155,10 +155,12 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
         if not result:
             return { 'success': False, 'message': 'Error during receiving the file' }
 
-        if not task.fileAdd(parts[1], result['id']):
+        path = parts[1].replace('\\', '/')
+
+        if not task.fileAdd(path, result['id']):
             return { 'success': False, 'message': 'Error during add file to the task' }
 
-        if self._e.taskGet(parts[0]).filesPathsFix(parts[1]) == False:
+        if self._e.taskGet(parts[0]).filesPathsFix(path) == False:
             return { 'success': False, 'message': 'Error during task file fixing' }
 
         return { 'success': True, 'message': 'Uploaded task file',
