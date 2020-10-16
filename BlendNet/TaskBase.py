@@ -15,13 +15,23 @@ from random import randrange
 from abc import ABC, abstractmethod
 
 from .Config import Config
+from . import utils
 
 class TaskConfig(Config):
     _defs = {
         'project': {
             'description': '''Set the project file will be used to render''',
             'type': str,
-            'validation': lambda cfg, val: cfg._parent.fileGet(val),
+        },
+        'path': {
+            'description': '''Absolute path to the project dir, required to resolve `//../dir/file`''',
+            'type': str,
+            'validation': lambda cfg, val: utils.isPathAbsolute(val) and utils.isPathStraight(val),
+        },
+        'cwd': {
+            'description': '''Absolute path to the current working dir, required to resolve `dir/file`''',
+            'type': str,
+            'validation': lambda cfg, val: utils.isPathAbsolute(val) and utils.isPathStraight(val),
         },
         'samples': {
             'description': '''How much samples to process for the task''',
@@ -234,7 +244,7 @@ class TaskBase(ABC):
 
     def fileAdd(self, path, file_id):
         '''Add file to the files map'''
-        if path.startswith('/') or '../' in path:
+        if '../' in path:
             return print('WARN: Unable to use path with absolute path or contains parent dir symlink')
 
         if not self.canBeChanged():
@@ -255,6 +265,29 @@ class TaskBase(ABC):
         with self._files_lock:
             return self._files.copy()
 
+    def filesPathsFix(self, path = None):
+        '''Fixes the files mapping to be absolute paths'''
+        tocheck = [path] if path else self._files.keys()
+        for p in tocheck:
+            if not utils.isPathStraight(p):
+                print('ERROR: Path is not straight:', p)
+                return False
+            if not self._cfg.path or not self._cfg.cwd:
+                # The required configs are not set - skipping fix
+                return None
+
+            if not utils.isPathAbsolute(p):
+                new_p = p
+                if p.startswith('//'):
+                    # Project-based file
+                    new_p = self._cfg.path + ('' if self._cfg.path.endswith('/') else '/') + p[2:]
+                else:
+                    # Relative path to CWD
+                    new_p = self._cfg.cwd + ('' if self._cfg.cwd.endswith('/') else '/') + p
+                with self._files_lock:
+                    self._files[new_p] = self._files.pop(p)
+        return True
+
     def run(self):
         '''Trigger the task to execute'''
         with self._state_lock:
@@ -262,7 +295,11 @@ class TaskBase(ABC):
                 print('WARN: Unable to run already started task')
                 return True
 
-            print('DEBUG: Running task %s' % self.name())
+            print('DEBUG: Running task', self.name())
+
+        if not self.check():
+            print('ERROR: Task check fail:', self.name())
+            return False
 
         return self._parent.taskAddToPending(self)
 
@@ -351,6 +388,10 @@ class TaskBase(ABC):
         errors = []
         with self._files_lock:
             for path, sha1 in self._files.items():
+                if not utils.isPathAbsolute(path):
+                    errors.append({self.name(): 'The file path "%s" is not absolute' % (path,)})
+                if not utils.isPathStraight(path):
+                    errors.append({self.name(): 'The file path "%s" is contains parent dir usage' % (path,)})
                 if not self._parent._fc.blobGet(sha1):
                     errors.append({self.name(): 'Unable to find required file "%s" with id "%s" in file cache' % (path, sha1)})
         for err in errors:
@@ -359,7 +400,22 @@ class TaskBase(ABC):
 
     def prepareWorkspace(self, files_map):
         '''Preparing workspace to process files'''
-        ws_dir = self._parent._fc.workspaceCreate(self.name(), files_map)
+        # Change the absolute paths to the required relative ones
+        # and placing files to the proper folders
+        new_files_map = {}
+        for path in files_map:
+            p = ''
+            if path.startswith(self._cfg.path):
+                p = path.replace(self._cfg.path, 'project/', 1)
+            elif utils.isPathAbsolute(path):
+                # Windows don't like colon and other spec symbols in the path
+                p = 'ext_deps' + '/' + path.replace(':', '_')
+            else:
+                # Just a regular relative files are going to the project dir
+                # they could be here because inner logic is using them to create files
+                p = 'project/' + path
+            new_files_map[p] = files_map[path]
+        ws_dir = self._parent._fc.workspaceCreate(self.name(), new_files_map)
         if not ws_dir:
             raise Exception('ERROR: Unable to prepare workspace to execute task')
 
@@ -368,20 +424,22 @@ class TaskBase(ABC):
     def runBlenderScriptProcessor(self, workspace_path, script_suffix, cfg, blendfile = None):
         '''Running blender in workspace with providing a script path'''
 
-        config_name = 'config-%s.json' % script_suffix
+        config_name = 'config-%s.json' % (script_suffix,)
         with open(os.path.join(workspace_path, config_name), 'w') as f:
             json.dump(cfg, f)
 
         script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'script-%s.py' % script_suffix)
         command = [sys.executable, '-b', '-noaudio', '-y']
         if blendfile:
-            command.append(os.path.join(workspace_path, blendfile))
+            command.append(os.path.join(workspace_path, 'project', blendfile))
         # Position of script is important - if it's after blend file,
         # than it will be started after blend loading
         command.append('-P')
         command.append(script_path)
         command.append('--')
         command.append(config_name)
+
+        print('DEBUG: Run subprocess "%s" in "%s"' % (command, workspace_path))
         return subprocess.Popen(
             command,
             cwd = workspace_path,

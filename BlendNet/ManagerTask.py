@@ -149,7 +149,7 @@ class ManagerTask(TaskBase):
             else:
                 files = dict([ (blob + '.exr', blob) for blob in to_merge[1] ])
                 cfg = {
-                    'images': list(files.keys()),
+                    'images': [ 'project/' + f for f in files.keys() ],
                     'result': 'result.exr',
                 }
                 with self.prepareWorkspace(files) as ws_path:
@@ -196,7 +196,7 @@ class ManagerTask(TaskBase):
             cfg = {
                 'use_compositing_nodes': self._cfg.use_compositing_nodes,
                 'frame': self._cfg.frame,
-                'render_file_path': render_name + '.exr',
+                'render_file_path': 'project/' + render_name + '.exr',
                 'result_dir': render_name + '-result',
             }
             print('DEBUG: Files to use in workspace:')
@@ -210,7 +210,7 @@ class ManagerTask(TaskBase):
                 for filename in os.listdir(os.path.join(ws_path, cfg['result_dir'])):
                     blob = self._parent._fc.blobStoreFile(os.path.join(ws_path, cfg['result_dir'], filename), True)
                     if not blob:
-                        print('ERROR: Unable to store blob for compose result of "%s"' % self.name())
+                        print('ERROR: Unable to store blob for compose result of', self.name())
                         return
                     self.statusComposeSet(blob['id'])
                     break
@@ -221,7 +221,7 @@ class ManagerTask(TaskBase):
             print('ERROR: Exception occurred during composing the result for task "%s": %s' % (self.name(), e))
             self.stateError({self.name(): 'Exception occurred during composing the result: %s' % (e,)})
 
-        print('DEBUG: Compositing completed for task "%s"' % (self.name(),))
+        print('DEBUG: Compositing completed for task', self.name())
 
     def _processOutputs(self, process, show_out = False):
         '''Shows info from the process'''

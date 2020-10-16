@@ -570,7 +570,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         # Fix and verify the blendfile dependencies
         bads = blend_file.getDependencies()[1]
         if bads:
-            self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
+            self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % (bads,))
             return {'CANCELLED'}
 
         # Saving project to the same directory
@@ -583,7 +583,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
                 copy = True,
             )
         except Exception as e:
-            self.report({'ERROR'}, 'Unable to save the "_blendnet.blend" project file: %s' % e)
+            self.report({'ERROR'}, 'Unable to save the "_blendnet.blend" project file: %s' % (e,))
             return {'CANCELLED'}
 
         if self.is_animation:
@@ -637,14 +637,13 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             print('DEBUG: Uploading task "%s" to the manager' % self._task_name)
 
             # Prepare list of files need to be uploaded
-            base_dir = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
             deps, bads = blend_file.getDependencies()
             if bads:
-                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run: %s' % bads)
+                self.report({'ERROR'}, 'Found some bad dependencies - please fix them before run:', bads)
                 return {'CANCELLED'}
 
-            deps_map = dict([ (rel, os.path.join(base_dir, rel)) for rel in deps ])
-            deps_map[fname] = self._project_file
+            deps_map = dict([ (rel, bpy.path.abspath(rel)) for rel in deps ])
+            deps_map[bpy.data.filepath] = self._project_file
 
             # Run the dependencies upload background process
             BlendNet.addon.managerTaskUploadFiles(self._task_name, deps_map)
@@ -667,7 +666,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
 
         # Configuring the task
         print('INFO: Configuring task "%s"' % self._task_name)
-        self.report({'INFO'}, 'Configuring task "%s"' % self._task_name)
+        self.report({'INFO'}, 'Configuring task "%s"' % (self._task_name,))
         samples = None
         if scene.cycles.progressive == 'PATH':
             samples = scene.cycles.samples
@@ -690,19 +689,21 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
             'project': fname,
             'use_compositing_nodes': scene.render.use_compositing,
             'compose_filepath': compose_filepath,
+            'path': bpy.path.abspath('//'), # To resolve the project parent paths `//../..`
+            'cwd': os.path.abspath(''), # Current working directory to resolve relative paths `../dir/file.txt`
         }
 
         if not BlendNet.addon.managerTaskConfig(self._task_name, cfg):
-            self.report({'WARNING'}, 'Unable to config the task "%s", let\'s retry...' % self._task_name)
+            self.report({'WARNING'}, 'Unable to config the task "%s", let\'s retry...' % (self._task_name,))
             return {'PASS_THROUGH'}
 
         # Running the task
         self.report({'INFO'}, 'Running task "%s"' % self._task_name)
         if not BlendNet.addon.managerTaskRun(self._task_name):
-            self.report({'WARNING'}, 'Unable to start the task "%s", let\'s retry...' % self._task_name)
+            self.report({'WARNING'}, 'Unable to start the task "%s", let\'s retry...' % (self._task_name,))
             return {'PASS_THROUGH'}
 
-        self.report({'INFO'}, 'Task "%s" marked as ready to start' % self._task_name)
+        self.report({'INFO'}, 'Task "%s" marked as ready to start' % (self._task_name,))
 
         # Ok, task is started - we can clean the name
         self._task_name = None

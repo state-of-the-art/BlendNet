@@ -64,11 +64,13 @@ class Config:
 
     def configsSet(self, configs):
         '''Walk through the defined configs and set configs values'''
+        results = []
         for name, conf in self._defs.items():
             if name in configs:
-                self._setattr(name, configs[name])
+                results.append(self._setattr(name, configs[name]))
             elif conf.get('value') is not None:
-                self._setattr(name, conf['value'](self) if callable(conf['value']) else conf['value'])
+                results.append(self._setattr(name, conf['value'](self) if callable(conf['value']) else conf['value']))
+        return all(results)
 
     def configsGet(self):
         '''Returns set configs or defaults if defined'''

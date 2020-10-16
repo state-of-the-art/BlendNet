@@ -87,7 +87,7 @@ except:
     pass
 
 eprint('INFO: Checking existance of the dependencies')
-blend_file.getDependencies()
+blend_file.getDependencies(bpy.path.abspath(os.path.join(bpy.data.filepath, '../ext_deps')))
 
 class Commands:
     def savePreview(cls = None):
