@@ -134,6 +134,11 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
     @SimpleREST.put('task/*/file/**')
     def put_task_file(self, req, parts):
         '''Upload file required to execute task'''
+        # The cross-system paths are a pain. In blender we have 3 types (including '//'), so the rules are:
+        # * Path delimiter is always '/'. Backslash '\' is for escaping only
+        # * The path should be straight and can't contain '/../' (parent dir usage)
+        # * Relative paths (dir/file.txt) will be transformed with 'cwd' to absolute path during config
+        # * Project paths (//something) will be transformed with 'path' to absolute path during config
         length = req.headers['content-length']
         if not length:
             return { 'success': False, 'message': 'Unable to find "Content-Length" header' }
@@ -152,6 +157,9 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
 
         if not task.fileAdd(parts[1], result['id']):
             return { 'success': False, 'message': 'Error during add file to the task' }
+
+        if self._e.taskGet(parts[0]).filesPathsFix(parts[1]) == False:
+            return { 'success': False, 'message': 'Error during task file fixing' }
 
         return { 'success': True, 'message': 'Uploaded task file',
             'data': result,
@@ -175,6 +183,9 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
 
         if not self._e.taskGet(parts[0]).configsSet(conf):
             return { 'success': False, 'message': 'Error during task configuration' }
+
+        if self._e.taskGet(parts[0]).filesPathsFix() != True:
+            return { 'success': False, 'message': 'Error during task files fixing' }
 
         return { 'success': True, 'message': 'Task configured' }
 

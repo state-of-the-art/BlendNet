@@ -63,7 +63,7 @@ class AgentTask(TaskBase):
         finally:
             self._parent._fc.workspaceClean(self.name())
 
-        print('INFO: Execution of the task "%s" is ended' % self.name())
+        print('INFO: Execution of the task "%s" is ended' % (self.name(),))
         self.stateStop()
 
         with self._execution_lock:

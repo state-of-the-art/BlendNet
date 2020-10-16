@@ -32,7 +32,7 @@ if 'frame' in task:
     scene.frame_current = task['frame']
 
 print('INFO: Checking existance of the dependencies')
-goods, bads = blend_file.getDependencies()
+goods, bads = blend_file.getDependencies(bpy.path.abspath(os.path.join(bpy.data.filepath, '../ext_deps')))
 print('DEBUG: Goods:', goods)
 print('DEBUG: Bads:', bads)
 
