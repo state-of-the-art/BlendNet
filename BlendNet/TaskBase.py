@@ -267,14 +267,16 @@ class TaskBase(ABC):
 
     def filesPathsFix(self, path = None):
         '''Fixes the files mapping to be absolute paths'''
-        tocheck = [path] if path else self._files.keys()
+        result = True
+        tocheck = [path] if path else list(self._files.keys())
         for p in tocheck:
             if not utils.isPathStraight(p):
                 print('ERROR: Path is not straight:', p)
                 return False
             if not self._cfg.project_path or not self._cfg.cwd_path:
                 # The required configs are not set - skipping fix
-                return None
+                result = None
+                continue
 
             if not utils.isPathAbsolute(p):
                 new_p = p
@@ -286,7 +288,9 @@ class TaskBase(ABC):
                     new_p = self._cfg.cwd_path + p.lstrip('/')
                 with self._files_lock:
                     self._files[new_p] = self._files.pop(p)
-        return True
+                print('DEBUG: Fixed path:', p, new_p)
+
+        return result
 
     def run(self):
         '''Trigger the task to execute'''

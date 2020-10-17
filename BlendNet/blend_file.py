@@ -30,7 +30,7 @@ def getDependencies(project_path, cwd_path, change = False):
 
 def fixPath(path, project_path, cwd_path, change):
     '''Will make sure the path is properly formatted'''
-    newpath = path
+    newpath = path.replace('\\', '/')
     # Make sure the blend file path is absolute for further processing
     if newpath.startswith('//') and project_path:
         # Convert the project (starts with '//') paths - they could

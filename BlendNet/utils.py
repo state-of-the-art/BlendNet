@@ -37,13 +37,13 @@ def isPathLinAbsolute(path):
 def isPathWinAbsolute(path):
     '''Will check the path: it's absolute for windows path'''
     # For now supports only general one-letter windows disks
-    return len(path) > 2 and path[1] == ':' and path[2] == '/'
+    return len(path) > 2 and path[1] == ':' and path[2] in ('/', '\\')
 
 def resolvePath(path):
     '''Will make sure all the parent dirs are resolved'''
     # There is no proper way to resolve win paths on linux and vice versa
     if platform.system() == 'Windows' and not isPathWinAbsolute(path):
-        return os.path.abspath('C:/'+path)[2:].replace('\\', '/')
+        return os.path.abspath('C:/'+path)[3:].replace('\\', '/')
     elif platform.system() != 'Windows' and not isPathLinAbsolute(path):
         return os.path.abspath('/'+path)[1:]
     else:
