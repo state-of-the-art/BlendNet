@@ -48,7 +48,7 @@ docker exec blendnet-executor curl --user 'None:None' --insecure --silent -X PUT
 # Uploading the required task dependencies
 docker exec blendnet-executor /bin/sh -c '
 cd /srv/workspace
-for f in $(find /srv/workspace/test-project -type f -name "*0032*") test-project/ext/tex/* test-project/proj/test-project.blend; do
+for f in $(find /srv/workspace/test-project/proj test-project/ext -type f -name "*0032*") test-project/ext/tex/* test-project/proj/test-project.blend; do
     curl --user "None:None" --insecure \
         --header "X-Checksum-Sha1:$(sha1sum "${f}" | cut -d " " -f 1)" \
         --upload-file "${f}" "https://blendnet-manager-host:8443/api/v1/task/test-task-1/file/${f}"
