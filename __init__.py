@@ -1518,8 +1518,9 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
         prev_name = ''
         loaded_final_render = False
         temp_dir = tempfile.TemporaryDirectory(prefix='blendnet-preview_')
+        result = self.begin_result(0, 0, self.size_x, self.size_y)
         while rendering:
-            time.sleep(1.0)
+            time.sleep(0.1)
 
             if self.test_break():
                 # TODO: render cancelled
@@ -1532,8 +1533,6 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
 
             task_name = wm.blendnet.manager_tasks[wm.blendnet.manager_tasks_idx].name
             if task_name != prev_name:
-                result = self.begin_result(0, 0, self.size_x, self.size_y)
-                self.end_result(result)
                 self.update_result(result)
                 prev_name = task_name
                 loaded_final_render = False
@@ -1578,7 +1577,6 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                     status['result']['preview'] = prev_status.get('result', {}).get('preview')
 
             if update_render:
-                result = self.begin_result(0, 0, self.size_x, self.size_y)
                 if os.path.isfile(update_render):
                     try:
                         result.layers[0].load_from_file(update_render)
@@ -1589,12 +1587,12 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
                         print('DEBUG: Loaded render result file:', update_render)
                 else:
                     print('ERROR: Unable to load not existing result file "%s"' % (update_render,))
-                self.end_result(result)
                 self.update_result(result)
 
             prev_status = status
 
             self.update_progress(status.get('samples_done')/status.get('samples', 1))
+        self.end_result(result)
 
 
 def initPreferences():
