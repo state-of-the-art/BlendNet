@@ -369,13 +369,6 @@ class BlendNetManagerTask(bpy.types.PropertyGroup):
     received: StringProperty()
 
 class BlendNetSessionProperties(bpy.types.PropertyGroup):
-    original_render_engine: StringProperty(
-        name = 'Original scene render engine',
-        description = 'Used to temporarily store the original render engine '
-                      'and restore it when the rendering is started',
-        default = '',
-    )
-
     manager_tasks: CollectionProperty(
         name = 'Manager tasks',
         description = 'Contains all the tasks that right now is available '
@@ -521,10 +514,15 @@ class BlendNetTaskPreviewOperation(bpy.types.Operator):
             bpy.ops.render.view_show('INVOKE_DEFAULT')
 
         # Save the original render engine to run render on BlendNet
-        context.window_manager.blendnet.original_render_engine = context.scene.render.engine
+        original_render_engine = context.scene.render.engine
         context.scene.render.engine = __package__
         # Start the render process
         self.result = bpy.ops.render.render('INVOKE_DEFAULT')
+
+        # Restore the original scene engine
+        time.sleep(1.0)
+        if context.scene.render.engine == __package__:
+            context.scene.render.engine = original_render_engine
 
         return {'FINISHED'}
 
@@ -659,7 +657,7 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
                 status = BlendNet.addon.managerTaskUploadFilesStatus()
                 if not status:
                     break
-                time.sleep(1)
+                time.sleep(1.0)
         if status:
             self.report({'INFO'}, 'Uploading process for task %s: %s' % (self._task_name, status))
             return {'PASS_THROUGH'}
@@ -1533,10 +1531,6 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
         scene = depsgraph.scene
         wm = bpy.context.window_manager
 
-        # Restore the original scene engine
-        if scene.render.engine == __package__:
-            scene.render.engine = wm.blendnet.original_render_engine
-
         scale = scene.render.resolution_percentage / 100.0
         self.size_x = int(scene.render.resolution_x * scale)
         self.size_y = int(scene.render.resolution_y * scale)
@@ -1548,7 +1542,7 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
         temp_dir = tempfile.TemporaryDirectory(prefix='blendnet-preview_')
         result = self.begin_result(0, 0, self.size_x, self.size_y)
         while rendering:
-            time.sleep(0.1)
+            time.sleep(1.0)
 
             if self.test_break():
                 # TODO: render cancelled
