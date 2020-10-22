@@ -47,7 +47,23 @@ scene.render.use_sequencer = False # No need for still images
 # Switch to use maximum threads possible on the worker
 scene.render.threads_mode = 'AUTO'
 
-scene.cycles.device = 'CPU' # The only one supported right now
+# scene.cycles.device = 'CPU' # The only one supported right now
+
+eprint('---------------   CUDA, DEVICES & GPU   ------------------')
+
+eprint('INFO: Enable CUDA to nvidia driver')
+bpy.context.preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'
+
+eprint('INFO: Enable and list all devices, or optionally disable CPU')
+for devices in bpy.context.preferences.addons['cycles'].preferences.get_devices():
+    for device in devices:
+        device.use = True
+        if device.type == 'CPU':
+            device.use = False
+        eprint("Device '{}' type {} : {}" . format(device.name, device.type, device.use))
+
+eprint('INFO: Set Scene Devices as GPU for Cycles')
+scene.cycles.device = 'GPU'
 
 # Disabling square samples - script is getting the real number of samples to render
 scene.cycles.use_square_samples = False
