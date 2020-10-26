@@ -431,7 +431,8 @@ def createInstanceAgent(cfg):
     # image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
     # image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
 
-    image_custom = 'ubuntu-os-cuda' # TODO should be from ui
+    # image_custom = 'ubuntu-os-cuda' # TODO should be from ui
+    image_custom = 'ubuntu-os-cloud' # TODO temporary workaround but there need to be some logic to select image
     image_res = compute.images().get(project=configs['project'], image=image_custom).execute()
     # image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-2004-lts').execute()
 
