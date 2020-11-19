@@ -40,7 +40,12 @@ def getBlenderVersions(ctx = None, req_version = None):
             # Getting the entry point of the mirror
             parser = LinkHTMLParser()
             with urlopen(url, timeout=5, context=ctx) as f:
-                parser.feed(f.read().decode())
+                data = f.read()
+                try:
+                    parser.feed(data.decode('utf-8'))
+                except LookupError:
+                    # UTF-8 not worked, so probably it's latin1
+                    parser.feed(data.decode('iso-8859-1'))
 
             # Processing links of the first layer
             links = parser.links()
@@ -71,7 +76,12 @@ def getBlenderVersions(ctx = None, req_version = None):
             # Getting lists of the specific dirs
             for d in dirs:
                 with urlopen(url+d, timeout=5, context=ctx) as f:
-                    parser.feed(f.read().decode())
+                    data = f.read()
+                    try:
+                        parser.feed(data.decode('utf-8'))
+                    except LookupError:
+                        # UTF-8 not worked, so probably it's latin1
+                        parser.feed(data.decode('iso-8859-1'))
 
                 # Processing links of the dirs
                 links = parser.links()
@@ -83,7 +93,7 @@ def getBlenderVersions(ctx = None, req_version = None):
                     # Getting the file and search for linux dist there
                     with urlopen(url+d+l, timeout=5, context=ctx) as f:
                         for line in f:
-                            sha256, name = line.decode().strip().split()
+                            sha256, name = line.decode('utf-8').strip().split()
                             if '-linux' not in name or '64.tar' not in name:
                                 continue
                             ver = name.split('-')[1]

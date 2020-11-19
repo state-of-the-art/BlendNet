@@ -77,7 +77,12 @@ class AgentTask(TaskBase):
         print('INFO: Starting process stderr read')
 
         for line in iter(process.stderr.readline, b''):
-            l = line.decode('utf-8').rstrip()
+            l = ''
+            try:
+                l = line.decode('utf-8').rstrip()
+            except LookupError:
+                # UTF-8 not worked, so probably it's latin1
+                l = line.decode('iso-8859-1').rstrip()
             print(">err>> %s" % l)
             self.executionMessagesAdd(l.strip())
 
@@ -108,7 +113,12 @@ class AgentTask(TaskBase):
         # Used to contain the current rendering sample
         curr_sample = 0
         for line in iter(process.stdout.readline, b''):
-            l = line.decode('utf-8').rstrip()
+            l = ''
+            try:
+                l = line.decode('utf-8').rstrip()
+            except LookupError:
+                # UTF-8 not worked, so probably it's latin1
+                l = line.decode('iso-8859-1').rstrip()
             print(">std>> %s" % l)
 
             if l.startswith('Fra:'):
@@ -196,7 +206,12 @@ class AgentTask(TaskBase):
                 statistics = {}
                 header = None
                 for line in iter(process.stdout.readline, b''): # Redefined line intentionally
-                    l = line.decode('utf-8').rstrip()
+                    l = ''
+                    try:
+                        l = line.decode('utf-8').rstrip()
+                    except LookupError:
+                        # UTF-8 not worked, so probably it's latin1
+                        l = line.decode('iso-8859-1').rstrip()
                     print(">std>> %s" % l)
 
                     if not l:

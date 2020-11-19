@@ -42,7 +42,12 @@ def _requestMetadata(path, verbose = False):
                     print('WARN: Unable to reach metadata serivce')
                     time.sleep(5)
                     continue
-                return res.read().decode('utf-8')
+                data = res.read()
+                try:
+                    return data.decode('utf-8')
+                except LookupError:
+                    # UTF-8 not worked, so probably it's latin1
+                    return data.decode('iso-8859-1')
     except Exception as e:
         if verbose:
             print('WARN: Metadata is not available ' + path)
@@ -79,7 +84,7 @@ def _executeAwsTool(*args, data=None):
         data = json.loads(result.stdout)
     except UnicodeDecodeError as e:
         print('WARN: Found UnicodeDecodeError during parsing the aws output, switching to ISO-8859-1:', str(e))
-        data = json.loads(result.stdout.decode('ISO-8859-1'))
+        data = json.loads(result.stdout.decode('iso-8859-1'))
     except json.decoder.JSONDecodeError:
         pass
 
@@ -120,12 +125,21 @@ def _getConfigs():
             print('ERROR: Unable to get aws config: %s %s' % (result.returncode, result.stdout))
             return configs
 
-        data = result.stdout.decode('UTF-8').strip()
+        data = result.stdout
+        try:
+            data = data.decode('utf-8').strip()
+        except LookupError:
+            # UTF-8 not worked, so probably it's latin1
+            data = data.decode('iso-8859-1').strip()
         for line in data.split(os.linesep)[2:]:
             param = line.split()[0]
             result = subprocess.run([AWS_TOOL_PATH, 'configure', 'get', param], stdout=subprocess.PIPE)
             if result.returncode == 0:
-                configs[param] = result.stdout.decode('UTF-8').strip()
+                try:
+                    configs[param] = result.stdout.decode('utf-8').strip()
+                except LookupError:
+                    # UTF-8 not worked, so probably it's latin1
+                    configs[param] = result.stdout.decode('iso-8859-1').strip()
 
         if checkLocation():
             print('INFO: Receiving configuration from the instance metadata')
