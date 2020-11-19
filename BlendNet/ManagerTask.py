@@ -204,7 +204,7 @@ class ManagerTask(TaskBase):
                 print('DEBUG:  ', files_map[path], path)
             with self.prepareWorkspace(files_map) as ws_path:
                 process = self.runBlenderScriptProcessor(ws_path, 'compose', cfg, blendfile=self._cfg.project)
-                outs = self._processOutputs(process, show_out=True)
+                self._processOutputs(process, show_out=True)
 
                 # Checking the result_dir and set the compose if the result file is here
                 for filename in os.listdir(os.path.join(ws_path, cfg['result_dir'])):
@@ -236,15 +236,29 @@ class ManagerTask(TaskBase):
         finally:
             if process.poll() == -9: # OOM kill
                 self.stateError({self.name(): 'The process was killed by Out Of Memory - try to use bigger VM for the Manager'})
-            if process.returncode != 0 or errs or show_out:
-                print('INFO: Process stdout:')
-                for line in outs.decode().split('\n'):
-                    print('  ' + line)
-            if process.returncode != 0 or errs:
-                print('WARN: The process seems not ended well:')
-                print('WARN: Process stderr:')
-                for line in errs.decode().split('\n'):
-                    print('  ' + line)
+
+            # On windows it's hard to predict what kind of encoding will be used
+            try:
+                try:
+                    outs = outs.decode('utf-8')
+                    errs = errs.decode('utf-8')
+                except LookupError:
+                    # UTF-8 not worked, so probably it's latin1
+                    outs = outs.decode('iso-8859-1')
+                    errs = errs.decode('iso-8859-1')
+
+                if process.returncode != 0 or errs or show_out:
+                    print('INFO: Process stdout:')
+                    for line in outs.split('\n'):
+                        print('  ' + line)
+                if process.returncode != 0 or errs:
+                    print('WARN: The process seems not ended well...')
+                    print('WARN: Process stderr:')
+                    for line in errs.split('\n'):
+                        print('  ' + line)
+            except LookupError:
+                print('ERROR: Unable to decode the blender stdout/stderr data')
+
         return outs
 
     def isRenderComplete(self):
