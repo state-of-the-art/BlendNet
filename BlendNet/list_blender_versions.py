@@ -24,7 +24,12 @@ def _downloadWorker(url, ctx, req_version, req_platform):
         # Process directory list
         parser = LinkHTMLParser()
         with urlopen(url, timeout=5, context=ctx) as f:
-            parser.feed(f.read().decode())
+            data = f.read()
+            try:
+                parser.feed(data.decode('utf-8'))
+            except LookupError:
+                # UTF-8 not worked, so probably it's latin1
+                parser.feed(data.decode('iso-8859-1'))
 
         # Processing links of the dirs
         links = parser.links()
@@ -39,7 +44,12 @@ def _downloadWorker(url, ctx, req_version, req_platform):
     # Getting the file and search for linux dist there
     with urlopen(url, timeout=5, context=ctx) as f:
         for line in f:
-            sha256, name = line.decode().strip().split()
+            try:
+                line = line.decode('utf-8')
+            except LookupError:
+                # UTF-8 not worked, so probably it's latin1
+                line = line.decode('iso-8859-1')
+            sha256, name = line.strip().split()
 
             # Check the required platform
             if req_platform == 'lin' and ('-linux' not in name or '64.tar' not in name):
@@ -108,7 +118,12 @@ def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
             # Getting the entry point of the mirror
             parser = LinkHTMLParser()
             with urlopen(url, timeout=5, context=ctx) as f:
-                parser.feed(f.read().decode())
+                data = f.read()
+                try:
+                    parser.feed(data.decode('utf-8'))
+                except LookupError:
+                    # UTF-8 not worked, so probably it's latin1
+                    parser.feed(data.decode('iso-8859-1'))
 
             # Processing links of the first layer
             links = parser.links()

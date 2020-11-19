@@ -58,10 +58,17 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
         # If running in blender - show it's info
         try:
             import bpy
+            build_date = bpy.app.build_date
+            try:
+                build_date = build_date.decode('utf-8')
+            except LookupError:
+                # UTF-8 not worked, so probably it's latin1
+                build_date = build_date.decode('iso-8859-1')
+
             out['data']['blender'] = {
                 'version': bpy.app.version,
                 'version_string': str(bpy.app.version_string),
-                'build_date': bpy.app.build_date.decode('utf-8'),
+                'build_date': build_date,
                 'render_threads': bpy.context.scene.render.threads,
             }
         except:
