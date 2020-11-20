@@ -6,6 +6,7 @@ Description: Basic REST service for BlendNet task servers
 '''
 
 import os, sys, time
+import threading
 import json # Used in the tasks configuration
 
 from . import providers
@@ -13,16 +14,21 @@ from . import SimpleREST
 
 class CopyStringIO:
     '''Class to store the logs to get them from client'''
-    def __init__(self, orig_out, copy_out):
+    def __init__(self, orig_out, copy_out, copy_out_lock):
         self._orig_out = orig_out
         self._copy_out = copy_out
+        self._copy_out_lock = copy_out_lock
     def write(self, buf):
         self._orig_out.write(buf)
-        self._copy_out[time.time()] = buf
-        if len(self._copy_out) > 100000:
-            to_remove_keys = sorted(self._copy_out.keys())[0:10000]
-            for key in to_remove_keys:
-                del self._copy_out[key]
+        with self._copy_out_lock:
+            key = str(time.time())
+            while key in self._copy_out:
+                key = str(float(key)+0.00001)
+            self._copy_out[key] = buf
+            if len(self._copy_out) > 100000:
+                to_remove_keys = sorted(self._copy_out.keys())[0:10000]
+                for key in to_remove_keys:
+                    del self._copy_out[key]
     def flush(self):
         self._orig_out.flush()
 
@@ -34,9 +40,10 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
 
         self._e = engine
         self._log = dict()
+        self._log_lock = threading.Lock()
 
-        sys.stdout = CopyStringIO(sys.__stdout__, self._log)
-        sys.stderr = CopyStringIO(sys.__stderr__, self._log)
+        sys.stdout = CopyStringIO(sys.__stdout__, self._log, self._log_lock)
+        sys.stderr = CopyStringIO(sys.__stderr__, self._log, self._log_lock)
 
     @SimpleREST.get()
     def info(self, req = None):
