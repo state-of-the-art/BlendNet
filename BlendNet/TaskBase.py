@@ -5,6 +5,7 @@
 Description: Base functionality for any task
 '''
 
+import bpy
 import os, sys
 import json
 import time
@@ -373,7 +374,7 @@ class TaskBase(ABC):
             json.dump(cfg, f)
 
         script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'script-%s.py' % script_suffix)
-        command = [sys.executable, '-b', '-noaudio', '-y']
+        command = [bpy.app.binary_path, '-b', '-noaudio', '-y']
         if blendfile:
             command.append(os.path.join(workspace_path, blendfile))
         # Position of script is important - if it's after blend file,
