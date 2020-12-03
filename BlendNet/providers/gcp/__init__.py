@@ -38,7 +38,13 @@ def _requestMetadata(path):
                 if res.getcode() == 503:
                     time.sleep(1)
                     continue
-                return res.read().decode('utf-8')
+                data = res.read()
+                try:
+                    data = data.decode('utf-8')
+                except (LookupError, UnicodeDecodeError):
+                    # UTF-8 not worked, so probably it's latin1
+                    data = data.decode('iso-8859-1')
+                return data
     except:
         return None
 
@@ -70,7 +76,13 @@ def findGoogleCloudSdk():
 
     if result.returncode != 0:
         return
-    lines = result.stdout.decode('utf-8').split('\n')
+    lines = result.stdout
+    try:
+        lines = lines.decode('utf-8').split('\n')
+    except (LookupError, UnicodeDecodeError):
+        # UTF-8 not worked, so probably it's latin1
+        lines = lines.decode('iso-8859-1').split('\n')
+
     for line in lines:
         if not line.startswith('Installation Root: ['):
             continue

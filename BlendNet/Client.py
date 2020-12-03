@@ -102,7 +102,7 @@ class ClientEngine:
         ca_data = self._ca
         try:
             ca_data = ca_data.decode('utf-8')
-        except LookupError:
+        except (LookupError, UnicodeDecodeError):
             # UTF-8 not worked, so probably it's latin1
             ca_data = ca_data.decode('iso-8859-1')
         self._context.load_verify_locations(cadata=ca_data)

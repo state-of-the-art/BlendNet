@@ -43,7 +43,7 @@ def getBlenderVersions(ctx = None, req_version = None):
                 data = f.read()
                 try:
                     parser.feed(data.decode('utf-8'))
-                except LookupError:
+                except (LookupError, UnicodeDecodeError):
                     # UTF-8 not worked, so probably it's latin1
                     parser.feed(data.decode('iso-8859-1'))
 
@@ -79,7 +79,7 @@ def getBlenderVersions(ctx = None, req_version = None):
                     data = f.read()
                     try:
                         parser.feed(data.decode('utf-8'))
-                    except LookupError:
+                    except (LookupError, UnicodeDecodeError):
                         # UTF-8 not worked, so probably it's latin1
                         parser.feed(data.decode('iso-8859-1'))
 
