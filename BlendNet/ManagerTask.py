@@ -163,7 +163,7 @@ class ManagerTask(TaskBase):
                     print('DEBUG: Merge result:', blob['id'], blob['size'])
                     to_merge[0](blob['id'])
         except Exception as e:
-            print('ERROR: Exception occurred during merging the results for task "%s": %s' % (self.name(), e))
+            print('ERROR: Exception occurred during merging the results for task "%s": %s: %s' % (self.name(), type(e), e))
             # Critical only on render merge
             if to_merge[0] == self.statusRenderSet:
                 self.stateError({self.name(): 'Exception occurred during merging the results: %s' % (e,)})
@@ -218,20 +218,22 @@ class ManagerTask(TaskBase):
                     self.stateError({self.name(): 'Result file of the compose operation not found'})
 
         except Exception as e:
-            print('ERROR: Exception occurred during composing the result for task "%s": %s' % (self.name(), e))
+            print('ERROR: Exception occurred during composing the result for task "%s": %s: %s' % (self.name(), type(e), e))
             self.stateError({self.name(): 'Exception occurred during composing the result: %s' % (e,)})
 
         print('DEBUG: Compositing completed for task "%s"' % (self.name(),))
 
     def _processOutputs(self, process, show_out = False):
         '''Shows info from the process'''
-        outs = b''
-        errs = b''
+        outb = b''
+        errb = b''
+        outs = ''
+        errs = ''
         try:
-            outs, errs = process.communicate(timeout=60)
+            outb, errb = process.communicate(timeout=60)
         except subprocess.TimeoutExpired:
             proc.kill()
-            outs, errs = proc.communicate()
+            outb, errb = proc.communicate()
             raise
         finally:
             if process.poll() == -9: # OOM kill
@@ -240,12 +242,12 @@ class ManagerTask(TaskBase):
             # On windows it's hard to predict what kind of encoding will be used
             try:
                 try:
-                    outs = outs.decode('utf-8')
-                    errs = errs.decode('utf-8')
-                except LookupError:
+                    outs = outb.decode('utf-8')
+                    errs = errb.decode('utf-8')
+                except (LookupError, UnicodeDecodeError):
                     # UTF-8 not worked, so probably it's latin1
-                    outs = outs.decode('iso-8859-1')
-                    errs = errs.decode('iso-8859-1')
+                    outs = outb.decode('iso-8859-1')
+                    errs = errb.decode('iso-8859-1')
 
                 if process.returncode != 0 or errs or show_out:
                     print('INFO: Process stdout:')
@@ -256,8 +258,8 @@ class ManagerTask(TaskBase):
                     print('WARN: Process stderr:')
                     for line in errs.split('\n'):
                         print('  ' + line)
-            except LookupError:
-                print('ERROR: Unable to decode the blender stdout/stderr data')
+            except (LookupError, UnicodeDecodeError) as e:
+                print('ERROR: Unable to decode the blender stdout/stderr data:', type(e), e)
 
         return outs
 
