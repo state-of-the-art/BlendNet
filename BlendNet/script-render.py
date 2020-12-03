@@ -80,11 +80,12 @@ if bpy.context.view_layer.cycles.use_denoising:
 eprint('INFO: Use progressive refine')
 scene.cycles.use_progressive_refine = True
 
-try:
-    import _cycles
-    _cycles.enable_print_stats() # Show detailed render statistics after the render
-except:
-    pass
+# BN-119 Disabled due to crashes during collecting the statistics
+#try:
+#    import _cycles
+#    _cycles.enable_print_stats() # Show detailed render statistics after the render
+#except:
+#    pass
 
 eprint('INFO: Checking existance of the dependencies')
 goods, bads = blend_file.getDependencies(task.get('project_path'), task.get('cwd_path'), True)
