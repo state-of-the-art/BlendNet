@@ -68,7 +68,7 @@ class Processor(providers.Processor, SimpleREST.ProcessorBase):
             build_date = bpy.app.build_date
             try:
                 build_date = build_date.decode('utf-8')
-            except LookupError:
+            except (LookupError, UnicodeDecodeError):
                 # UTF-8 not worked, so probably it's latin1
                 build_date = build_date.decode('iso-8859-1')
 

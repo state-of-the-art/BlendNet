@@ -45,7 +45,7 @@ def _requestMetadata(path, verbose = False):
                 data = res.read()
                 try:
                     return data.decode('utf-8')
-                except LookupError:
+                except (LookupError, UnicodeDecodeError):
                     # UTF-8 not worked, so probably it's latin1
                     return data.decode('iso-8859-1')
     except Exception as e:
@@ -125,7 +125,7 @@ def _getConfigs():
         data = result.stdout
         try:
             data = data.decode('utf-8').strip()
-        except LookupError:
+        except (LookupError, UnicodeDecodeError):
             # UTF-8 not worked, so probably it's latin1
             data = data.decode('iso-8859-1').strip()
         for line in data.split(os.linesep)[2:]:
@@ -134,7 +134,7 @@ def _getConfigs():
             if result.returncode == 0:
                 try:
                     configs[param] = result.stdout.decode('utf-8').strip()
-                except LookupError:
+                except (LookupError, UnicodeDecodeError):
                     # UTF-8 not worked, so probably it's latin1
                     configs[param] = result.stdout.decode('iso-8859-1').strip()
 

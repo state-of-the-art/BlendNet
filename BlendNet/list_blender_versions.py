@@ -27,7 +27,7 @@ def _downloadWorker(url, ctx, req_version, req_platform):
             data = f.read()
             try:
                 parser.feed(data.decode('utf-8'))
-            except LookupError:
+            except (LookupError, UnicodeDecodeError):
                 # UTF-8 not worked, so probably it's latin1
                 parser.feed(data.decode('iso-8859-1'))
 
@@ -46,7 +46,7 @@ def _downloadWorker(url, ctx, req_version, req_platform):
         for line in f:
             try:
                 line = line.decode('utf-8')
-            except LookupError:
+            except (LookupError, UnicodeDecodeError):
                 # UTF-8 not worked, so probably it's latin1
                 line = line.decode('iso-8859-1')
             sha256, name = line.strip().split()
@@ -121,7 +121,7 @@ def getBlenderVersions(ctx = None, req_platform = 'lin', req_version = None):
                 data = f.read()
                 try:
                     parser.feed(data.decode('utf-8'))
-                except LookupError:
+                except (LookupError, UnicodeDecodeError):
                     # UTF-8 not worked, so probably it's latin1
                     parser.feed(data.decode('iso-8859-1'))
 

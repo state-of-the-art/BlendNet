@@ -59,7 +59,7 @@ class AgentTask(TaskBase):
                 self._watchBlenderScriptProcessor(process, ws_path)
             print('DEBUG: Destroyed the workspace')
         except Exception as e:
-            print('ERROR: Exception occurred during task "%s" execution: %s' % (self.name(), e))
+            print('ERROR: Exception occurred during task "%s" execution: %s: %s' % (self.name(), type(e), e))
         finally:
             self._parent._fc.workspaceClean(self.name())
 
@@ -80,7 +80,7 @@ class AgentTask(TaskBase):
             l = ''
             try:
                 l = line.decode('utf-8').rstrip()
-            except LookupError:
+            except (LookupError, UnicodeDecodeError):
                 # UTF-8 not worked, so probably it's latin1
                 l = line.decode('iso-8859-1').rstrip()
             print(">err>> %s" % l)
@@ -116,7 +116,7 @@ class AgentTask(TaskBase):
             l = ''
             try:
                 l = line.decode('utf-8').rstrip()
-            except LookupError:
+            except (LookupError, UnicodeDecodeError):
                 # UTF-8 not worked, so probably it's latin1
                 l = line.decode('iso-8859-1').rstrip()
             print(">std>> %s" % l)
@@ -209,7 +209,7 @@ class AgentTask(TaskBase):
                     l = ''
                     try:
                         l = line.decode('utf-8').rstrip()
-                    except LookupError:
+                    except (LookupError, UnicodeDecodeError):
                         # UTF-8 not worked, so probably it's latin1
                         l = line.decode('iso-8859-1').rstrip()
                     print(">std>> %s" % l)
