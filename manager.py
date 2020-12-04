@@ -24,11 +24,11 @@ providers.selectProvider(conf.get('provider', 'local'))
 
 from BlendNet import (
     disable_buffering,
+    getVersion,
     SimpleREST,
     Server,
     Manager,
 )
-#loadManager()
 
 class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
@@ -67,4 +67,5 @@ httpd.setBasicAuth('%s:%s' % (conf.get('auth_user', None), conf.get('auth_passwo
 if os.path.exists('ca.crt') and conf.get('bucket'):
     providers.uploadFileToBucket('ca.crt', conf.get('bucket'))
 
+print('BlendNet Manager v' + getVersion())
 httpd.serve_forever()
