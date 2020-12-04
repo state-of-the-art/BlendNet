@@ -8,6 +8,8 @@ assignees: ''
 ---
 
 ### Is your feature request related to a problem? Please describe.
+If it's a question - it's better to ask here: https://gitter.im/state-of-the-art/BlendNet
+
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
 ### Describe the solution you'd like

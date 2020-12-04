@@ -8,7 +8,10 @@ VERSION=$(head -10 "${ROOT}/__init__.py" | grep -o 'version.: *(.*)' | tr ',' '.
 
 DEV_VER=''
 if [ "x$(head -10 "${ROOT}/__init__.py" | grep -o 'warning.: *.dev')" != 'x' ]; then
-    DEV_VER="-$(git -C "${ROOT}" rev-parse --short HEAD)"
+    # Mark development version with hash to not confuse with the logs
+    GIT_HASH=$(git -C "${ROOT}" rev-parse --short HEAD)
+    sed -i "0,/'development version'/{s/'development version'/'dev-${GIT_HASH}'/}" "${ROOT}/__init__.py"
+    DEV_VER="-${GIT_HASH}"
 fi
 
 echo "INFO: BlendNet version: $VERSION$DEV_VER"

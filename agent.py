@@ -24,12 +24,11 @@ providers.selectProvider(conf.get('provider', 'local'))
 
 from BlendNet import (
     disable_buffering,
+    getVersion,
     SimpleREST,
     Server,
     Agent,
-    providers,
 )
-#loadAgent()
 
 class Processor(Server.Processor):
     def __init__(self, conf, prefix = 'api/v1'):
@@ -41,4 +40,5 @@ httpd = SimpleREST.HTTPServer((conf.get('listen_host', ''), conf.get('listen_por
 httpd.setTLS(conf.get('server_tls_key', None), conf.get('server_tls_cert', None))
 httpd.setBasicAuth('%s:%s' % (conf.get('auth_user', None), conf.get('auth_password', None)))
 
+print('BlendNet Agent v' + getVersion())
 httpd.serve_forever()

@@ -8,6 +8,8 @@ assignees: ''
 ---
 
 ### Issue description:
+If it's a question - it's better to ask here: https://gitter.im/state-of-the-art/BlendNet
+
 A clear and concise description of what the bug is.
 
 ### Environment:
@@ -31,4 +33,5 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 ### Additional context
-Add any other context about the problem here.
+Please check https://github.com/state-of-the-art/BlendNet/wiki/If-you-stuck-with-an-issue to attach
+some useful logs here.
