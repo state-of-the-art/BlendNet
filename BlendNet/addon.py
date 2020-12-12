@@ -23,11 +23,41 @@ from .list_blender_versions import getBlenderVersions
 def selectProvider(provider):
     '''Sets the current provider identifier'''
     print('DEBUG: selecting provider:', provider)
-    providers.selectProvider(provider)
+    return providers.selectProvider(provider, getAddonProviderSettings(provider))
 
 def getProvider():
     '''Returns the current provider identifier'''
     return providers.selected_provider
+
+def getAddonProviderSettings(provider):
+    '''Collects the provider settings from Addon'''
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    out = {}
+
+    provider_settings = providers.getProvidersSettings(provider)
+    for key, data in provider_settings.items():
+        path = 'provider_' + provider + '_' + key
+        if path in prefs and prefs[path]:
+            out[key] = prefs[path]
+    return out
+
+def updateProviderSettings(self, context):
+    '''Change the current provider settings and reinit the provider'''
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    provider = getProvider()
+    if provider != prefs.resource_provider:
+        # In case the provider got issues during select previously
+        selectProvider(prefs.resource_provider)
+        return
+
+    addon_settings = getAddonProviderSettings(provider)
+    curr_settings = providers.getProvidersSettings(provider)
+
+    for key, val in addon_settings.items():
+        # Only update if something was changed
+        if curr_settings[key]['value'] != val:
+            print('DEBUG: reinit provider:', providers.initProvider(addon_settings))
+            return
 
 def hidePassword(obj, prop):
     '''Will set the hidden value and replace the property with stars'''
@@ -122,6 +152,15 @@ def getProviderDocs(provider):
 def getProviderMessages(provider):
     '''Returns the list of messages for provider'''
     return providers.getProviderMessages(provider)
+
+def getProvidersSettings():
+    '''Returns the dict of provider settings'''
+    return providers.getProvidersSettings()
+
+def getProviderSettings():
+    '''Returns the dict of provider settings'''
+    prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
+    return providers.getProvidersSettings(prefs.resource_provider)
 
 def getAddonDefaultProvider():
     '''Will return the default provider'''

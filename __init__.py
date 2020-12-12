@@ -220,6 +220,16 @@ class BlendNetAddonPreferences(bpy.types.AddonPreferences):
             if line.startswith('Help: '):
                 split.operator('wm.url_open', text='How to setup', icon='HELP').url = line.split(': ', 1)[-1]
 
+        provider_settings = BlendNet.addon.getProviderSettings()
+        for key, data in provider_settings.items():
+            path = 'provider_' + self.resource_provider + '_' + key
+            if not path in self.__class__.__annotations__:
+                print('ERROR: Unable to find provider setting:', path)
+                continue
+            if path not in self or self[path] is None:
+                self[path] = data.get('value')
+            box.prop(self, path)
+
         messages = BlendNet.addon.getProviderMessages(self.resource_provider)
         for msg in messages:
             box.label(text=msg, icon='ERROR')
@@ -1617,6 +1627,21 @@ class BlendNetRenderEngine(bpy.types.RenderEngine):
         self.end_result(result)
 
 
+def loadProvidersSettings():
+    '''Get the available providers settings to set and load them during registration of the class'''
+    all_settings = BlendNet.addon.getProvidersSettings()
+    for provider, provider_settings in all_settings.items():
+        for key, data in provider_settings.items():
+            path = 'provider_' + provider + '_' + key
+            print('DEBUG: registering provider config:', path)
+            # TODO: Support different types of provider settings
+            BlendNetAddonPreferences.__annotations__[path] = StringProperty(
+                name = data.get('name'),
+                description = data.get('description'),
+                subtype = 'FILE_PATH',
+                update = BlendNet.addon.updateProviderSettings,
+            )
+
 def initPreferences():
     '''Will init the preferences with defaults'''
     prefs = bpy.context.preferences.addons[__package__].preferences
@@ -1641,6 +1666,8 @@ def initPreferences():
     BlendNet.addon.getProviderInfo()
 
 def register():
+    BlendNet.providers.loadProviders()
+    loadProvidersSettings()
     bpy.utils.register_class(BlendNetAddonPreferences)
     initPreferences()
 

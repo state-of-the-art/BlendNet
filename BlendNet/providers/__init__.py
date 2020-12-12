@@ -14,35 +14,33 @@ __all__ = [
 
 modules = {}
 modules_messages = {}
-
-with os.scandir(os.path.dirname(__file__)) as it:
-    for entry in it:
-        if not entry.is_dir() or entry.name.startswith('__'):
-            continue
-        print('INFO: Found provider "%s"' % entry.name)
-        modules[entry.name] = None
-
 selected_provider = 'local'
 
-def selectProvider(provider):
+def loadProviders():
+    '''Go through the folders in the module dir and loads the providers'''
+    with os.scandir(os.path.dirname(__file__)) as it:
+        for entry in it:
+            if not entry.is_dir() or entry.name.startswith('__') or entry.name in modules:
+                continue
+            print('INFO: Found provider "%s"' % entry.name)
+
+            try:
+                modules[entry.name] = importlib.import_module('.'+entry.name, __package__)
+            except Exception as e:
+                print('WARN: Unable to load "%s" provider due to init error: %s' % (entry.name, e))
+                #traceback.print_exc()
+                modules[entry.name] = 'ERROR: Unable to load provider: %s' % (e,)
+
+def selectProvider(provider, settings = dict()):
     '''Sets the current provider identifier'''
     if provider not in modules:
         raise Exception('Unable to set unknown provider "%s"' % provider)
-
-    # Check the provider is loaded or contains an error
-    if not modules.get(provider) or isinstance(modules.get(provider), str):
-        try:
-            modules[provider] = importlib.import_module('.'+provider, __package__)
-        except Exception as e:
-            print('WARN: Unable to load "%s" provider due to init error: %s' % (provider, e))
-            #traceback.print_exc()
-            modules[provider] = 'ERROR: Unable to load provider: %s' % (e,)
 
     if isinstance(modules[provider], str):
         print('WARN: Unable to select "%s" provider due to loading error: %s' % (provider, modules[provider]))
         return
 
-    check = modules[provider].checkDependencies()
+    check = modules[provider].checkDependencies(settings)
     if isinstance(check, str):
         print('WARN: Unable to select "%s" provider due to dependency error: %s' % (provider, check))
         modules_messages[provider] = [check]
@@ -60,6 +58,10 @@ def selectProvider(provider):
 
     return True
 
+def initProvider(settings):
+    '''Init provider with settings'''
+    return _execProviderFunc('initProvider', None, settings)
+
 def getProviderMessages(provider):
     '''Returns messages happening in the provider module'''
     return modules_messages.get(provider, [])
@@ -68,16 +70,28 @@ def getProvidersDoc():
     '''Return map with {ident: (name, desc), ...} of the providers'''
     out = {}
     for ident, module in modules.items():
-        if module is None:
-            out[ident] = (ident + ' - select to init provider', '')
-            continue
-        elif isinstance(module, str):
+        if isinstance(module, str):
             out[ident] = (ident + ' - ERROR: unable to initialize', module)
             continue
         name, desc = module.__doc__.split('\n', 1)
         out[ident] = (name.strip(), desc.strip())
 
     return out
+
+def getProvidersSettings(provider = None):
+    '''Get the available providers settings'''
+    out = dict()
+    for ident, module in modules.items():
+        if provider and ident == provider:
+            return module.getSettings()
+        if isinstance(module, str):
+            continue
+        out[ident] = module.getSettings()
+    return out
+
+def getProviderSettings():
+    '''Get the current provider settings'''
+    return _execProviderFunc('getSettings')
 
 def getSelectedProvider():
     '''Return a list with provider identifiers if their deps are ok'''
@@ -216,4 +230,3 @@ def findPATHExec(executable):
                 return f
 
     return None
-    raise Exception('Unable to find the required binary "%s" in PATH - maybe it was not installed properly?' % (name,))

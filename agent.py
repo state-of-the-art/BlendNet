@@ -18,6 +18,7 @@ if os.path.exists('agent.json'):
         import json
         conf = json.load(f)
 
+providers.loadProviders()
 # Select the required provider, local by default
 providers.selectProvider(conf.get('provider', 'local'))
 
