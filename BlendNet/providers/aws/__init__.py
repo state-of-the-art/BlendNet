@@ -30,7 +30,7 @@ METADATA_URL = 'http://169.254.169.254/latest/'
 
 LOCATION = None # If the script is running in the cloud
 AWS_TOOL_PATH = None
-AWS_EXEC_PREFIX = ('--output', 'json')
+AWS_EXEC_PREFIX = None
 AWS_CONFIGS = None
 
 def _requestMetadata(path, verbose = False):
@@ -87,29 +87,51 @@ def _executeAwsTool(*args, data=None):
 
     return data
 
-def initProvider():
+def initProvider(settings = dict()):
     '''Finds absolute path of the aws tool'''
     from .. import findPATHExec
-    tool_path = findPATHExec('aws')
-    if not tool_path:
+    global AWS_TOOL_PATH
+    AWS_TOOL_PATH = settings.get('aws_exec_path', findPATHExec('aws'))
+    if not AWS_TOOL_PATH:
         return 'Unable to find "aws" in PATH - check the provider documentation and install the requirements'
 
-    print('INFO: Found aws tool:', tool_path)
+    if not os.path.isfile(AWS_TOOL_PATH):
+        path = AWS_TOOL_PATH
+        AWS_TOOL_PATH = None
+        return 'The provided "aws" exec path is invalid: %s' % (path,)
 
-    global AWS_TOOL_PATH, AWS_EXEC_PREFIX
-    AWS_TOOL_PATH = tool_path
-    AWS_EXEC_PREFIX = (AWS_TOOL_PATH,) + AWS_EXEC_PREFIX
+    global AWS_EXEC_PREFIX, AWS_CONFIGS
+    AWS_EXEC_PREFIX = (AWS_TOOL_PATH, '--output', 'json')
+    AWS_CONFIGS = None
     configs = _getConfigs()
+
+    if not configs:
+        AWS_TOOL_PATH = None
+        return 'Error during execution of "aws" tool'
+
+    print('INFO: Using aws tool:', AWS_TOOL_PATH)
+
     if 'region' in configs:
         print('INFO: Set region for aws tool: ' + configs['region'])
         AWS_EXEC_PREFIX += ('--region', configs['region'])
 
     return True
 
-def checkDependencies():
+def checkDependencies(settings):
     if not AWS_TOOL_PATH:
-        return initProvider()
+        return initProvider(settings)
     return True
+
+def getSettings():
+    '''Returns the available settings of the provider'''
+    return {
+        'aws_exec_path': {
+            'name': 'Path to aws exec',
+            'description': 'Full path to the aws or aws.exe from AWS CLI v2, by default uses PATH env to find it',
+            'type': 'path',
+            'value': AWS_TOOL_PATH,
+        },
+    }
 
 def _getConfigs():
     '''Returns dict with aws tool configs'''
