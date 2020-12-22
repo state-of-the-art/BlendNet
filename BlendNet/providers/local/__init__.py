@@ -70,6 +70,7 @@ def downloadDataFromBucket(bucket_name, path):
         with open('ca.crt', 'rb') as fh:
             return fh.read()
     except:
+        print('WARN: Unable to load the "ca.crt" certificate')
         pass
 
 def createInstanceAgent(cfg):

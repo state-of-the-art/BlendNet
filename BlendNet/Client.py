@@ -94,7 +94,6 @@ class ClientEngine:
         if self._ca:
             return True
 
-        print('DEBUG: Getting the CA certificate')
         self._ca = providers.downloadDataFromBucket(self._cfg.get('bucket', ''), 'ca.crt')
         if not self._ca:
             return False
@@ -132,7 +131,7 @@ class ClientEngine:
                 print('WARN: Communication issue with request to "%s": HTTP %d %s: %s' % (req.full_url, e.getcode(), e.reason, e.read(1024)))
             except urllib.error.URLError as e:
                 if 'CERTIFICATE_VERIFY_FAILED' in str(e.reason) or 'handshake' in str(e.reason):
-                    print('WARN: Seems like wrong (or old) CA is loaded, reinit SSL context and repeat.')
+                    print('WARN: SSL verify failed. It could be wrong (or old) CA is loaded, will reinit SSL context and repeat.')
                     self._initSSL()
                 else:
                     if req.data and (isinstance(e.reason, BrokenPipeError) # Linux
