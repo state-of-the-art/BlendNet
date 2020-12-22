@@ -23,7 +23,8 @@ from .list_blender_versions import getBlenderVersions
 def selectProvider(provider):
     '''Sets the current provider identifier'''
     print('DEBUG: selecting provider:', provider)
-    return providers.selectProvider(provider, getAddonProviderSettings(provider))
+    providers.selectProvider(provider, getAddonProviderSettings(provider))
+    return
 
 def getProvider():
     '''Returns the current provider identifier'''
@@ -775,7 +776,7 @@ def getAgentPriceBG(inst_type, context = None):
     global instance_type_price_agent_cache
     info = instance_type_price_agent_cache
     prefs = bpy.context.preferences.addons[__package__.split('.', 1)[0]].preferences
-    if info[1] != inst_type or info[2] != prefs.agent_use_cheap_instance and info[3] != prefs.agent_cheap_multiplier:
+    if info[1] != inst_type or info[2] != prefs.agent_use_cheap_instance or info[3] != prefs.agent_cheap_multiplier:
         instance_type_price_agent_cache[1] = inst_type
         instance_type_price_agent_cache[2] = prefs.agent_use_cheap_instance
         instance_type_price_agent_cache[3] = prefs.agent_cheap_multiplier
