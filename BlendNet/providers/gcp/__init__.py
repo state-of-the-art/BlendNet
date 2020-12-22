@@ -23,7 +23,8 @@ METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 METADATA_HEADER = ('Metadata-Flavor', 'Google')
 
 LOCATION = None # If the script is running in the cloud
-GOOGLE_CLOUD_TOOL_PATH = None
+GCP_CONF = {}
+
 GOOGLE_CLOUD_SDK_ROOT = None
 GOOGLE_CLOUD_SDK_CREDS = None
 GOOGLE_CLOUD_SDK_CONFIGS = None
@@ -61,18 +62,36 @@ def checkLocation():
 
 def setGoogleCloudSdk(path):
     global GOOGLE_CLOUD_SDK_ROOT
+    unloadGoogleCloudSdk()
     if os.path.isdir(path) and os.path.isdir('%s/platform' % path):
-        print('INFO: Found google cloud sdk: %s' % path)
+        print('INFO: Found google cloud sdk:', path)
         GOOGLE_CLOUD_SDK_ROOT = path
         return True
+    else:
+        GOOGLE_CLOUD_SDK_ROOT = None
 
     return False
 
+def unloadGoogleCloudSdk():
+    print('DEBUG: Unloading gcloud paths:', GOOGLE_CLOUD_SDK_ROOT)
+    paths = (
+        '%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT,
+        '%s/platform/bq/third_party' % GOOGLE_CLOUD_SDK_ROOT,
+        '%s/lib' % GOOGLE_CLOUD_SDK_ROOT,
+    )
+    for path in paths:
+        if path in sys.path:
+            sys.path.remove(path)
+
 def loadGoogleCloudSdk():
     print('DEBUG: Loading gcloud paths:', GOOGLE_CLOUD_SDK_ROOT)
-    sys.path.append('%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT)
-    sys.path.append('%s/platform/bq/third_party' % GOOGLE_CLOUD_SDK_ROOT)
-    sys.path.append('%s/lib' % GOOGLE_CLOUD_SDK_ROOT)
+    paths = (
+        '%s/lib/third_party' % GOOGLE_CLOUD_SDK_ROOT,
+        '%s/platform/bq/third_party' % GOOGLE_CLOUD_SDK_ROOT,
+        '%s/lib' % GOOGLE_CLOUD_SDK_ROOT,
+    )
+    for path in paths:
+        sys.path.append(path)
 
     # Init credentials and properties
     _getCreds()
@@ -80,21 +99,24 @@ def loadGoogleCloudSdk():
 def initProvider(settings = dict()):
     '''Will try to find the google cloud sdk home directory'''
     from .. import findPATHExec
-    global GOOGLE_CLOUD_TOOL_PATH
-    GOOGLE_CLOUD_TOOL_PATH = settings.get('gcloud_exec_path', findPATHExec('gcloud'))
-    if not GOOGLE_CLOUD_TOOL_PATH:
+    global GCP_CONF
+    GCP_CONF = settings
+    if not GCP_CONF.get('gcloud_exec_path'):
+        GCP_CONF['gcloud_exec_path'] = findPATHExec('gcloud')
+
+    if not GCP_CONF['gcloud_exec_path']:
         return 'Unable to find "gcloud" in PATH - check the provider documentation and install the requirements'
 
-    if not os.path.isfile(GOOGLE_CLOUD_TOOL_PATH):
-        path = GOOGLE_CLOUD_TOOL_PATH
-        GOOGLE_CLOUD_TOOL_PATH = None
+    if not os.path.isfile(GCP_CONF['gcloud_exec_path']):
+        path = GCP_CONF['gcloud_exec_path']
+        GCP_CONF['gcloud_exec_path'] = None
         return 'The provided "gcloud" exec path is invalid: %s' % (path,)
 
-    print('INFO: Using gcloud tool:', GOOGLE_CLOUD_TOOL_PATH)
+    print('INFO: Using gcloud tool:', GCP_CONF['gcloud_exec_path'])
 
-    result = subprocess.run([GOOGLE_CLOUD_TOOL_PATH, 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run([GCP_CONF['gcloud_exec_path'], 'info'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
-        GOOGLE_CLOUD_TOOL_PATH = None
+        GCP_CONF['gcloud_exec_path'] = None
         return 'Error during execution of "gcloud" tool: %s' % (result.stderr.decode('utf-8').strip(),)
 
     lines = result.stdout
@@ -113,7 +135,7 @@ def initProvider(settings = dict()):
         loadGoogleCloudSdk()
         return True
 
-    GOOGLE_CLOUD_TOOL_PATH = None
+    GCP_CONF['gcloud_exec_path'] = None
     return 'Unable to find Google Cloud SDK Installation Root path'
 
 def checkDependencies(settings):
@@ -128,7 +150,7 @@ def getSettings():
             'name': 'Path to gcloud exec',
             'description': 'Full path to the gcloud or gcloud.exe from Google Cloud SDK, by default uses PATH env to find it',
             'type': 'path',
-            'value': GOOGLE_CLOUD_TOOL_PATH,
+            'value': GCP_CONF.get('gcloud_exec_path'),
         },
     }
 

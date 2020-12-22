@@ -29,7 +29,7 @@ import pathlib
 METADATA_URL = 'http://169.254.169.254/latest/'
 
 LOCATION = None # If the script is running in the cloud
-AWS_TOOL_PATH = None
+AWS_CONF = {}
 AWS_EXEC_PREFIX = None
 AWS_CONFIGS = None
 
@@ -88,28 +88,31 @@ def _executeAwsTool(*args, data=None):
     return data
 
 def initProvider(settings = dict()):
-    '''Finds absolute path of the aws tool'''
+    '''Init provider configuration'''
     from .. import findPATHExec
-    global AWS_TOOL_PATH
-    AWS_TOOL_PATH = settings.get('aws_exec_path', findPATHExec('aws'))
-    if not AWS_TOOL_PATH:
+    global AWS_CONF
+    AWS_CONF = settings
+    if not AWS_CONF.get('aws_tool_path'):
+        AWS_CONF['aws_tool_path'] = findPATHExec('aws')
+
+    if not AWS_CONF['aws_tool_path']:
         return 'Unable to find "aws" in PATH - check the provider documentation and install the requirements'
 
-    if not os.path.isfile(AWS_TOOL_PATH):
-        path = AWS_TOOL_PATH
-        AWS_TOOL_PATH = None
+    if not os.path.isfile(AWS_CONF['aws_tool_path']):
+        path = AWS_CONF['aws_tool_path']
+        AWS_CONF['aws_tool_path'] = None
         return 'The provided "aws" exec path is invalid: %s' % (path,)
 
     global AWS_EXEC_PREFIX, AWS_CONFIGS
-    AWS_EXEC_PREFIX = (AWS_TOOL_PATH, '--output', 'json')
+    AWS_EXEC_PREFIX = (AWS_CONF['aws_tool_path'], '--output', 'json')
     AWS_CONFIGS = None
     configs = _getConfigs()
 
     if not configs:
-        AWS_TOOL_PATH = None
+        AWS_CONF['aws_tool_path'] = None
         return 'Error during execution of "aws" tool'
 
-    print('INFO: Using aws tool:', AWS_TOOL_PATH)
+    print('INFO: Using aws tool:', AWS_CONF['aws_tool_path'])
 
     if 'region' in configs:
         print('INFO: Set region for aws tool: ' + configs['region'])
@@ -118,7 +121,7 @@ def initProvider(settings = dict()):
     return True
 
 def checkDependencies(settings):
-    if not AWS_TOOL_PATH:
+    if not AWS_CONF.get('aws_tool_path'):
         return initProvider(settings)
     return True
 
@@ -129,7 +132,7 @@ def getSettings():
             'name': 'Path to aws exec',
             'description': 'Full path to the aws or aws.exe from AWS CLI v2, by default uses PATH env to find it',
             'type': 'path',
-            'value': AWS_TOOL_PATH,
+            'value': AWS_CONF.get('aws_tool_path'),
         },
     }
 
@@ -139,7 +142,7 @@ def _getConfigs():
     if not AWS_CONFIGS:
         configs = dict()
         # aws configure returns non-json table, so using direct call
-        result = subprocess.run([AWS_TOOL_PATH, 'configure', 'list'], stdout=subprocess.PIPE)
+        result = subprocess.run([AWS_CONF['aws_tool_path'], 'configure', 'list'], stdout=subprocess.PIPE)
         if result.returncode != 0:
             print('ERROR: Unable to get aws config: %s %s' % (result.returncode, result.stdout))
             return configs
@@ -152,7 +155,7 @@ def _getConfigs():
             data = data.decode('iso-8859-1').strip()
         for line in data.split(os.linesep)[2:]:
             param = line.split()[0]
-            result = subprocess.run([AWS_TOOL_PATH, 'configure', 'get', param], stdout=subprocess.PIPE)
+            result = subprocess.run([AWS_CONF['aws_tool_path'], 'configure', 'get', param], stdout=subprocess.PIPE)
             if result.returncode == 0:
                 try:
                     configs[param] = result.stdout.decode('utf-8').strip()
