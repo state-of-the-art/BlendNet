@@ -82,10 +82,10 @@ def getProvidersSettings(provider = None):
     '''Get the available providers settings'''
     out = dict()
     for ident, module in modules.items():
-        if provider and ident == provider:
-            return module.getSettings()
         if isinstance(module, str):
             continue
+        if provider and ident == provider:
+            return module.getSettings()
         out[ident] = module.getSettings()
     return out
 
