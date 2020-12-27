@@ -34,7 +34,7 @@ class Client:
 
     def taskFileStreamPut(self, task, rel_path, stream, size, checksum):
         '''Send stream to the task file'''
-        path = 'task/%s/file/%s' % (task, rel_path)
+        path = 'task/%s/file/%s' % (task, urllib.parse.quote(rel_path))
         return self._engine.put(path, stream, size, checksum)
 
     def taskConfigPut(self, task, config_data):
