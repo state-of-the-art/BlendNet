@@ -7,6 +7,7 @@ Description: Manager REST client
 
 import os
 import json
+import urllib # To quote the url path values
 from io import StringIO
 
 from .Client import (
@@ -42,7 +43,7 @@ class ManagerClient(Client):
 
     def agentCreate(self, agent_name, conf):
         '''Create the new agent'''
-        path = 'agent/%s/config' % (agent_name,)
+        path = 'agent/%s/config' % (urllib.parse.quote(agent_name),)
         data = json.dumps(conf)
         stream = StringIO(data)
 
@@ -50,11 +51,11 @@ class ManagerClient(Client):
 
     def agentRemove(self, agent_name):
         '''Remove the agent from the manager'''
-        return self._engine.delete('agent/' + agent_name)
+        return self._engine.delete('agent/' + urllib.parse.quote(agent_name))
 
     def agentLog(self, agent_name):
         '''Get the log information for the agent'''
-        return self._engine.get('agent/%s/log' % (agent_name,))
+        return self._engine.get('agent/%s/log' % (urllib.parse.quote(agent_name),))
 
     def calculateChecksum(self, stream):
         '''Will calculate and redurn checksum and reset stream'''
