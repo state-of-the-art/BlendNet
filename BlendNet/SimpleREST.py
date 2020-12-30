@@ -9,7 +9,7 @@ import os
 import http.server # Multi-threaded http server
 import ssl # To protect the communication
 import json # Used to produce responses
-import urllib.parse # Quote the strings
+import urllib.parse # Quote and unquote the strings
 
 class ProcessorBase:
     def __init__(self, prefix = 'api/v1'):
@@ -59,10 +59,10 @@ class ProcessorBase:
             it = split_path.pop(0)
             if it not in curr:
                 if '*' in curr:
-                    parts.append(it)
+                    parts.append(urllib.parse.unquote(it))
                     it = '*'
                 elif '**' in curr:
-                    parts.append('/'.join([it]+split_path))
+                    parts.append(urllib.parse.unquote('/'.join([it]+split_path)))
                     func = curr['**']['?']
                     break
                 else:
