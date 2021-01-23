@@ -51,7 +51,7 @@ def getResources(session_id):
 
     return out
 
-def downloadDataFromBucket(bucket_name, path):
+def downloadDataFromStorage(storage_info, path):
     if not path == 'ca.crt':
         return
 

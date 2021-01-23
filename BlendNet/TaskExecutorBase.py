@@ -35,10 +35,15 @@ class TaskExecutorConfig(Config):
             'type': str,
             'default': '',
         },
-        'bucket': {
-            'description': '''Bucket name used to store things''',
+        'storage_account': {
+            'description': '''Storage account used to store things''',
             'type': str,
-            'default': lambda cfg: providers.getBucketName(cfg.session_id),
+            'default': lambda cfg: providers.getStorageInfo(cfg.session_id).get('storage_account'),
+        },
+        'storage_name': {
+            'description': '''Storage name used to store things''',
+            'type': str,
+            'default': lambda cfg: providers.getStorageInfo(cfg.session_id).get('storage_name'),
         },
         'listen_host': {
             'description': '''Server listen host - ip address or name''',

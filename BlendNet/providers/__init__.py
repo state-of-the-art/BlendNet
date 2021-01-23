@@ -116,13 +116,13 @@ def getInstanceTypes():
     '''Provides map with information about the available instances'''
     return _execProviderFunc('getInstanceTypes')
 
-def uploadFileToBucket(path, bucket, dest_path = None):
+def uploadFileToStorage(path, storage_info, dest_path = None):
     '''Uploads file to the network storage'''
-    return _execProviderFunc('uploadFileToBucket', None, path, bucket, dest_path)
+    return _execProviderFunc('uploadFileToStorage', None, path, storage_info, dest_path)
 
-def uploadDataToBucket(data, bucket, dest_path):
+def uploadDataToStorage(data, storage_info, dest_path):
     '''Uploads data to the network storage'''
-    return _execProviderFunc('uploadDataToBucket', None, data, bucket, dest_path)
+    return _execProviderFunc('uploadDataToStorage', None, data, storage_info, dest_path)
 
 def getResources(session_id):
     '''Returns map of allocated resources - manager and agents'''
@@ -133,8 +133,8 @@ def getNodeLog(instance_id):
     '''Returns string with the node serial output log'''
     return _execProviderFunc('getNodeLog', 'NOT IMPLEMENTED', instance_id)
 
-def getBucketName(session_id):
-    return _execProviderFunc('getBucketName', None, session_id)
+def getStorageInfo(session_id):
+    return _execProviderFunc('getStorageInfo', None, session_id)
 
 def getManagerName(session_id):
     return _execProviderFunc('getManagerName', 'blendnet-%s-manager' % session_id, session_id)
@@ -168,22 +168,22 @@ def destroyInstance(inst_id):
 def deleteInstance(inst_id):
     return _execProviderFunc('deleteInstance', '', inst_id)
 
-def downloadDataFromBucket(bucket_name, path):
-    return _execProviderFunc('downloadDataFromBucket', None, bucket_name, path)
+def downloadDataFromStorage(storage_info, path):
+    return _execProviderFunc('downloadDataFromStorage', None, storage_info, path)
 
 def createFirewall(target_tag, port):
     return _execProviderFunc('createFirewall', None, target_tag, port)
 
-def setupBucket(bucket_name, cfg):
-    '''Creating the bucket and uploads the blendnet and configs into'''
-    print('INFO: Uploading BlendNet logic to the bucket %s' % bucket_name)
+def setupStorage(storage_info, cfg):
+    '''Creating the storage and uploads the blendnet and configs into'''
+    print('INFO: Uploading BlendNet logic to the storage')
 
-    _execProviderFunc('createBucket', None, bucket_name)
+    _execProviderFunc('createStorage', None, storage_info)
 
     workers = Workers(
-        'Uploading BlendNet logic to the bucket "%s"' % bucket_name,
+        'Uploading BlendNet logic to the storage',
         8,
-        uploadFileToBucket,
+        uploadFileToStorage,
     )
 
     # Walk through python files and upload them
@@ -193,12 +193,12 @@ def setupBucket(bucket_name, cfg):
             if not f.endswith('.py'):
                 continue
             filepath = os.path.join(root, f)
-            workers.add(filepath, bucket_name, filepath.replace(dirpath, 'blendnet', 1))
+            workers.add(filepath, storage_info, filepath.replace(dirpath, 'blendnet', 1))
 
     workers.start()
 
     import json
-    uploadDataToBucket(json.dumps(cfg).encode('utf-8'), bucket_name, 'work_manager/manager.json')
+    uploadDataToStorage(json.dumps(cfg).encode('utf-8'), storage_info, 'work_manager/manager.json')
 
     workers.wait()
 

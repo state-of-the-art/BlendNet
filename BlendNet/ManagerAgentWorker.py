@@ -31,7 +31,7 @@ class ManagerAgentWorker(object):
         self._cfg = cfg.copy()
 
         # Generate agent certificates
-        if 'bucket' in self._cfg:
+        if 'storage_name' in self._cfg:
             SimpleREST.generateCert(self._name, self._name)
 
         self._enabled = False
@@ -264,9 +264,9 @@ class ManagerAgentWorker(object):
 
         if self.state() in (ManagerAgentState.STOPPED, ManagerAgentState.DESTROYED):
             # Agent will need config files right after the start
-            providers.uploadFileToBucket('%s.key' % self._name, self._cfg.get('bucket'), 'work_%s/server.key' % self._name)
-            providers.uploadFileToBucket('%s.crt' % self._name, self._cfg.get('bucket'), 'work_%s/server.crt' % self._name)
-            providers.uploadDataToBucket(json.dumps(self._cfg).encode('utf-8'), self._cfg.get('bucket'), 'work_%s/agent.json' % self._name)
+            providers.uploadFileToStorage('%s.key' % self._name, self._cfg, 'work_%s/server.key' % self._name)
+            providers.uploadFileToStorage('%s.crt' % self._name, self._cfg, 'work_%s/server.crt' % self._name)
+            providers.uploadDataToStorage(json.dumps(self._cfg).encode('utf-8'), self._cfg, 'work_%s/agent.json' % self._name)
 
         if self.state() == ManagerAgentState.STOPPED:
             print('DEBUG: Starting the existing agent instance "%s"' % self._name)

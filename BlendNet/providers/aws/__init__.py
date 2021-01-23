@@ -632,14 +632,14 @@ def createFirewall(target_group, port):
         # The blendnet-manager security group already exists
         pass
 
-def createBucket(bucket_name):
+def createStorage(storage_info):
     '''Creates bucket if it's not exists'''
 
-    _executeAwsTool('s3', 'mb', 's3://' + bucket_name)
+    _executeAwsTool('s3', 'mb', 's3://' + storage_info['storage_name'])
 
     return True
 
-def uploadFileToBucket(path, bucket_name, dest_path = None):
+def uploadFileToStorage(path, storage_info, dest_path = None):
     '''Upload file to the bucket'''
 
     if not dest_path:
@@ -649,28 +649,28 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     if platform.system() == 'Windows':
         dest_path = pathlib.PurePath(dest_path).as_posix()
 
-    dest_path = 's3://%s/%s' % (bucket_name, dest_path)
+    dest_path = 's3://%s/%s' % (storage_info['storage_name'], dest_path)
 
     print('INFO: Uploading file to "%s" ...' % (dest_path,))
     _executeAwsTool('s3', 'cp', path, dest_path)
 
     return True
 
-def uploadDataToBucket(data, bucket_name, dest_path):
+def uploadDataToStorage(data, storage_info, dest_path):
     '''Upload data to the bucket'''
     # WARN: tmpfile is not allowed to use by subprocesses on Win
 
-    dest_path = 's3://%s/%s' % (bucket_name, dest_path)
+    dest_path = 's3://%s/%s' % (storage_info['storage_name'], dest_path)
 
     print('INFO: Uploading data to "%s" ...' % (dest_path,))
     _executeAwsTool('s3', 'cp', '-', dest_path, data=data)
 
     return True
 
-def downloadDataFromBucket(bucket_name, path):
+def downloadDataFromStorage(storage_info, path):
     tmp_file = tempfile.NamedTemporaryFile()
 
-    path = 's3://%s/%s' % (bucket_name, path)
+    path = 's3://%s/%s' % (storage_info['storage_name'], path)
 
     print('INFO: Downloading file from "%s" ...' % (path,))
 
@@ -738,9 +738,11 @@ def getManagerSizeDefault():
 def getAgentSizeDefault():
     return 't2.micro'
 
-def getBucketName(session_id):
-    '''Returns the appropriate bucket name'''
-    return 'blendnet-%s' % (session_id.lower(),)
+def getStorageInfo(session_id):
+    '''Returns the aws bucket info'''
+    return {
+        'storage_name': 'blendnet-%s' % (session_id.lower(),),
+    }
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id

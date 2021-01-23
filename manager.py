@@ -64,9 +64,9 @@ httpd = SimpleREST.HTTPServer((conf.get('listen_host', ''), conf.get('listen_por
 httpd.setTLS(conf.get('server_tls_key', None), conf.get('server_tls_cert', None))
 httpd.setBasicAuth('%s:%s' % (conf.get('auth_user', None), conf.get('auth_password', None)))
 
-# Upload CA back to the blendnet bucket
-if os.path.exists('ca.crt') and conf.get('bucket'):
-    providers.uploadFileToBucket('ca.crt', conf.get('bucket'))
+# Upload CA back to the blendnet storage
+if os.path.exists('ca.crt') and conf.get('storage_name'):
+    providers.uploadFileToStorage('ca.crt', conf)
 
 print('BlendNet Manager v' + getVersion())
 httpd.serve_forever()
