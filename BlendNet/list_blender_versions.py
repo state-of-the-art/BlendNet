@@ -6,6 +6,7 @@ Used in Addon and build automation
 Usage: python4 list_blender_versions.py [<version>/lts/latest]
 '''
 
+import os
 from urllib.request import urlopen
 from html.parser import HTMLParser
 
@@ -94,6 +95,9 @@ def getBlenderVersions(ctx = None, req_version = None):
                     with urlopen(url+d+l, timeout=5, context=ctx) as f:
                         for line in f:
                             sha256, name = line.decode('utf-8').strip().split()
+                            # In case name is actually an absolute path
+                            name = os.path.basename(name)
+
                             if '-linux' not in name or '64.tar' not in name:
                                 continue
                             ver = name.split('-')[1]
