@@ -51,6 +51,9 @@ def _downloadWorker(url, ctx, req_version, req_platform):
                 line = line.decode('iso-8859-1')
             sha256, name = line.strip().split()
 
+            # In case name is actually an absolute path
+            name = os.path.basename(name)
+
             # Check the required platform
             if req_platform == 'lin' and ('-linux' not in name or '64.tar' not in name):
                 # blender-2.80-linux-glibc217-x86_64.tar.bz2
