@@ -52,7 +52,13 @@ def getAddonProviderSettings(provider):
     for key, data in provider_settings.items():
         path = 'provider_' + provider + '_' + key
         if path in prefs and prefs[path]:
-            out[key] = prefs[path]
+            if data['type'] == 'choice':
+                path += '_value'
+                # Use actual value instead of enum index or when items are not filled
+                if path in prefs and prefs[path]:
+                    out[key] = prefs[path]
+            else:
+                out[key] = prefs[path]
     return out
 
 def updateProviderSettings(self, context):
@@ -64,8 +70,15 @@ def updateProviderSettings(self, context):
         selectProvider(prefs.resource_provider)
         return
 
-    addon_settings = getAddonProviderSettings(provider)
     curr_settings = providers.getProvidersSettings(provider)
+    # Update enums actual values stored in separated property
+    for key, data in curr_settings.items():
+        if data['type'] == 'choice':
+            path = 'provider_' + provider + '_' + key
+            if prefs.get(path+'_value') != getattr(prefs, path):
+                prefs[path+'_value'] = getattr(prefs, path)
+
+    addon_settings = getAddonProviderSettings(provider)
 
     for key, val in addon_settings.items():
         # Only update if something was changed
@@ -117,7 +130,7 @@ def getConfig():
     cfg['dist_checksum'] = prefs.blender_dist_checksum
     cfg['provider'] = prefs.resource_provider
     if prefs.resource_provider != 'local':
-        cfg['bucket'] = providers.getBucketName(cfg['session_id'])
+        cfg.update(providers.getStorageInfo(cfg['session_id']))
 
     cfg['listen_port'] = prefs.manager_port
     cfg['auth_user'] = prefs.manager_user
@@ -461,8 +474,8 @@ def startManager(cfg = None):
             return
 
     if not isManagerStarted():
-        print('DEBUG: Running uploading to bucket')
-        providers.setupBucket(cfg['bucket'], cfg)
+        print('DEBUG: Running uploading to storage')
+        providers.setupStorage(cfg, cfg)
 
     if not isManagerCreated():
         print('DEBUG: Creating the required firewall rules')

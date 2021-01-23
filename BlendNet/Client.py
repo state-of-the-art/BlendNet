@@ -94,7 +94,7 @@ class ClientEngine:
         if self._ca:
             return True
 
-        self._ca = providers.downloadDataFromBucket(self._cfg.get('bucket', ''), 'ca.crt')
+        self._ca = providers.downloadDataFromStorage(self._cfg, 'ca.crt')
         if not self._ca:
             return False
 

@@ -50,6 +50,8 @@ def _downloadWorker(url, ctx, req_version, req_platform):
                 # UTF-8 not worked, so probably it's latin1
                 line = line.decode('iso-8859-1')
             sha256, name = line.strip().split()
+            # In case name in the sha256 file absolute
+            name = os.path.basename(name)
 
             # In case name is actually an absolute path
             name = os.path.basename(name)

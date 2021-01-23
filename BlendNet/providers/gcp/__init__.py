@@ -683,15 +683,15 @@ def _getBucket(bucket_name):
     except: # TODO: be more specific here - exception could mean anything
         return None
 
-def createBucket(bucket_name):
+def createStorage(storage_info):
     '''Creates bucket if it's not exists'''
     storage, configs = _getStorage(), _getConfigs()
 
-    if _getBucket(bucket_name):
+    if _getBucket(storage_info['storage_name']):
         return True
 
     body = {
-        'name': bucket_name,
+        'name': storage_info['storage_name'],
         'location': configs['region'],
     }
 
@@ -700,7 +700,7 @@ def createBucket(bucket_name):
 
     return True
 
-def uploadFileToBucket(path, bucket_name, dest_path = None):
+def uploadFileToStorage(path, storage_info, dest_path = None):
     '''Upload file to the bucket'''
     from googleapiclient.http import MediaIoBaseUpload
     storage = _getStorage()
@@ -713,17 +713,17 @@ def uploadFileToBucket(path, bucket_name, dest_path = None):
     if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
 
-    print('INFO: Uploading file to "gs://%s/%s"...' % (bucket_name, body['name']))
+    print('INFO: Uploading file to "gs://%s/%s"...' % (storage_info['storage_name'], body['name']))
     with open(path, 'rb') as f:
         # TODO: make sure file uploaded or there is an isssue
         storage.objects().insert(
-            bucket=bucket_name, body=body,
+            bucket=storage_info['storage_name'], body=body,
             media_body=MediaIoBaseUpload(f, 'application/octet-stream', chunksize=8*1024*1024),
         ).execute()
 
     return True
 
-def uploadDataToBucket(data, bucket_name, dest_path):
+def uploadDataToStorage(data, storage_info, dest_path):
     '''Upload file to the bucket'''
     from googleapiclient.http import MediaInMemoryUpload
     storage = _getStorage()
@@ -736,23 +736,23 @@ def uploadDataToBucket(data, bucket_name, dest_path):
     if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
 
-    print('INFO: Uploading data to "gs://%s/%s"...' % (bucket_name, body['name']))
+    print('INFO: Uploading data to "gs://%s/%s"...' % (storage_info['storage_name'], body['name']))
     # TODO: make sure file uploaded or there is an isssue
     storage.objects().insert(
-        bucket=bucket_name, body=body,
+        bucket=storage_info['storage_name'], body=body,
         media_body=MediaInMemoryUpload(data, mimetype='application/octet-stream'),
     ).execute()
 
     return True
 
-def downloadDataFromBucket(bucket_name, path):
+def downloadDataFromStorage(storage_info, path):
     from googleapiclient.http import MediaIoBaseDownload
     from io import BytesIO
 
     storage = _getStorage()
 
-    print('INFO: Downloading data from "gs://%s/%s"...' % (bucket_name, path))
-    req = storage.objects().get_media(bucket=bucket_name, object=path)
+    print('INFO: Downloading data from "gs://%s/%s"...' % (storage_info['storage_name'], path))
+    req = storage.objects().get_media(bucket=storage_info['storage_name'], object=path)
     data_fd = BytesIO()
     downloader = MediaIoBaseDownload(data_fd, req, chunksize=8*1024*1024)
 
@@ -822,10 +822,12 @@ def getManagerSizeDefault():
 def getAgentSizeDefault():
     return 'n1-highcpu-2'
 
-def getBucketName(session_id):
-    '''Returns the appropriate bucket name'''
+def getStorageInfo(session_id):
+    '''Returns the gcp bucket info'''
     configs = _getConfigs()
-    return '%s-blendnet-%s' % (configs['project'], session_id.lower())
+    return {
+        'storage_name': '%s-blendnet-%s' % (configs['project'], session_id.lower()),
+    }
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id

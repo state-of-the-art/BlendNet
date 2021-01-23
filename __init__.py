@@ -1681,13 +1681,28 @@ def loadProvidersSettings():
         for key, data in provider_settings.items():
             path = 'provider_' + provider + '_' + key
             print('DEBUG: registering provider config:', path)
-            # TODO: Support different types of provider settings
-            BlendNetAddonPreferences.__annotations__[path] = StringProperty(
-                name = data.get('name'),
-                description = data.get('description'),
-                subtype = 'FILE_PATH',
-                update = BlendNet.addon.updateProviderSettings,
-            )
+            if data.get('type') in ('string', 'path'):
+                BlendNetAddonPreferences.__annotations__[path] = StringProperty(
+                    name = data.get('name'),
+                    description = data.get('description'),
+                    subtype = 'FILE_PATH' if data['type'] == 'path' else 'NONE',
+                    update = BlendNet.addon.updateProviderSettings,
+                )
+            elif data.get('type') == 'choice':
+                BlendNetAddonPreferences.__annotations__[path] = EnumProperty(
+                    name = data.get('name'),
+                    description = data.get('description'),
+                    items = data.get('values'),
+                    update = BlendNet.addon.updateProviderSettings,
+                )
+                # Additional field to store string value (otherwise it's hard on init when
+                # value of enum is integer and has no items to choose from)
+                BlendNetAddonPreferences.__annotations__[path+'_value'] = StringProperty(
+                    name = data.get('name'),
+                    description = data.get('description'),
+                )
+            else:
+                print('ERROR: Unknown provider "%s" setting "%s" type: %s' % (provider, key, data.get('type')))
 
 def initPreferences():
     '''Will init the preferences with defaults'''
