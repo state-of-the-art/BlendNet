@@ -130,7 +130,7 @@ def getConfig():
     cfg['dist_checksum'] = prefs.blender_dist_checksum
     cfg['provider'] = prefs.resource_provider
     if prefs.resource_provider != 'local':
-        cfg.update(providers.getStorageInfo(cfg['session_id']))
+        cfg['storage_url'] = providers.getStorageUrl(cfg['session_id'])
 
     cfg['listen_port'] = prefs.manager_port
     cfg['auth_user'] = prefs.manager_user
@@ -475,7 +475,7 @@ def startManager(cfg = None):
 
     if not isManagerStarted():
         print('DEBUG: Running uploading to storage')
-        providers.setupStorage(cfg, cfg)
+        providers.setupStorage(cfg['storage_url'], cfg)
 
     if not isManagerCreated():
         print('DEBUG: Creating the required firewall rules')
