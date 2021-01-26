@@ -22,7 +22,7 @@ import platform
 import tempfile
 import ssl
 import site
-import urllib.request
+import urllib
 import subprocess
 import pathlib
 
@@ -133,6 +133,12 @@ def getSettings():
             'description': 'Full path to the aws or aws.exe from AWS CLI v2, by default uses PATH env to find it',
             'type': 'path',
             'value': AWS_CONF.get('aws_tool_path'),
+        },
+        'bucket_name': {
+            'name': 'Bucket name',
+            'description': '''What the bucket to use - in case it's empty will create the new one as "blendnet-{session_id}"''',
+            'type': 'string',
+            'value': AWS_CONF.get('bucket_name', ''),
         },
     }
 
@@ -367,9 +373,9 @@ fi
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
 #!/bin/sh
 echo '--> Update the BlendNet manager'
-aws s3 cp --recursive 's3://blendnet-{session_id}/work_manager' "$(getent passwd blendnet-user | cut -d: -f6)"
-aws s3 rm --recursive 's3://blendnet-{session_id}/work_manager'
-aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+aws s3 cp --recursive '{storage_url}/work_manager' "$(getent passwd blendnet-user | cut -d: -f6)"
+aws s3 rm --recursive '{storage_url}/work_manager'
+aws s3 cp --recursive '{storage_url}/blendnet' /srv/blendnet
 EOF
 
 chmod +x /usr/local/bin/blendnet_cloud_init.sh
@@ -403,7 +409,7 @@ systemctl start blendnet-manager.service
 '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
-        session_id=cfg['session_id'],
+        storage_url=cfg['storage_url'],
     )
 
     options = [
@@ -472,8 +478,8 @@ fi
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
 #!/bin/sh
 echo '--> Update the BlendNet agent'
-aws s3 cp --recursive 's3://blendnet-{session_id}/work_{name}' "$(getent passwd blendnet-user | cut -d: -f6)"
-aws s3 cp --recursive 's3://blendnet-{session_id}/blendnet' /srv/blendnet
+aws s3 cp --recursive '{storage_url}/work_{instance_name}' "$(getent passwd blendnet-user | cut -d: -f6)"
+aws s3 cp --recursive '{storage_url}/blendnet' /srv/blendnet
 EOF
 
 chmod +x /usr/local/bin/blendnet_cloud_init.sh
@@ -507,8 +513,8 @@ systemctl start blendnet-agent.service
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
-        session_id=cfg['session_id'],
-        name=cfg['instance_name'],
+        instance_name=cfg['instance_name'],
+        storage_url=cfg['storage_url'],
     )
 
     options = [
@@ -632,50 +638,74 @@ def createFirewall(target_group, port):
         # The blendnet-manager security group already exists
         pass
 
-def createStorage(storage_info):
+def createStorage(storage_url):
     '''Creates bucket if it's not exists'''
 
-    _executeAwsTool('s3', 'mb', 's3://' + storage_info['storage_name'])
+    _executeAwsTool('s3', 'mb', storage_url)
 
     return True
 
-def uploadFileToStorage(path, storage_info, dest_path = None):
+def uploadFileToStorage(path, storage_url, dest_path = None):
     '''Upload file to the bucket'''
 
-    if not dest_path:
-        dest_path = path
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
 
-    # If the plugin was called from Windows, we need to convert the path separators
-    if platform.system() == 'Windows':
-        dest_path = pathlib.PurePath(dest_path).as_posix()
-
-    dest_path = 's3://%s/%s' % (storage_info['storage_name'], dest_path)
-
-    print('INFO: Uploading file to "%s" ...' % (dest_path,))
-    _executeAwsTool('s3', 'cp', path, dest_path)
+    print('INFO: Uploading file to "%s" ...' % (storage_url,))
+    _executeAwsTool('s3', 'cp', path, storage_url)
 
     return True
 
-def uploadDataToStorage(data, storage_info, dest_path):
+def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None, exclude = None):
+    '''Recursively upload files to the storage'''
+
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
+
+    print('INFO: AWS: Uploading files from %s to "%s" ...' % (path, storage_url))
+
+    cmd = ['s3', 'cp', path, storage_url, '--recursive']
+    if include:
+        cmd += ['--include', include]
+    if exclude:
+        cmd += ['--exclude', exclude]
+
+    _executeAwsTool(*cmd)
+
+    print('INFO: AWS: Uploaded files to "%s"' % (storage_url,))
+
+    return True
+
+def uploadDataToStorage(data, storage_url, dest_path = None):
     '''Upload data to the bucket'''
     # WARN: tmpfile is not allowed to use by subprocesses on Win
 
-    dest_path = 's3://%s/%s' % (storage_info['storage_name'], dest_path)
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
 
-    print('INFO: Uploading data to "%s" ...' % (dest_path,))
-    _executeAwsTool('s3', 'cp', '-', dest_path, data=data)
+    print('INFO: Uploading data to "%s" ...' % (storage_url,))
+    _executeAwsTool('s3', 'cp', '-', storage_url, data=data)
 
     return True
 
-def downloadDataFromStorage(storage_info, path):
+def downloadDataFromStorage(storage_url, path = None):
     tmp_file = tempfile.NamedTemporaryFile()
 
-    path = 's3://%s/%s' % (storage_info['storage_name'], path)
+    if path:
+        if platform.system() == 'Windows':
+            path = pathlib.PurePath(path).as_posix()
+        storage_url += '/' + path
 
-    print('INFO: Downloading file from "%s" ...' % (path,))
+    print('INFO: Downloading file from "%s" ...' % (storage_url,))
 
     try:
-        _executeAwsTool('s3', 'cp', path, tmp_file.name)
+        _executeAwsTool('s3', 'cp', storage_url, tmp_file.name)
     except AwsToolException:
         print('WARN: Downloading failed')
         return None
@@ -738,11 +768,10 @@ def getManagerSizeDefault():
 def getAgentSizeDefault():
     return 't2.micro'
 
-def getStorageInfo(session_id):
-    '''Returns the aws bucket info'''
-    return {
-        'storage_name': 'blendnet-%s' % (session_id.lower(),),
-    }
+def getStorageUrl(session_id):
+    '''Returns the aws bucket url'''
+    default_name = 'gs://blendnet-{session_id}'.format(session_id=session_id.lower())
+    return 's3://' + GCP_CONF.get('bucket_name') or default_name
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id

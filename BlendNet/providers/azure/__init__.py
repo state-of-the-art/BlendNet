@@ -22,7 +22,7 @@ import platform
 import tempfile
 import ssl
 import site
-import urllib.request
+import urllib
 import subprocess
 import pathlib
 
@@ -42,7 +42,7 @@ def _requestMetadata(path, verbose = False):
         while True:
             with urllib.request.urlopen(req, timeout=1) as res:
                 if res.getcode() == 503:
-                    print('WARN: Unable to reach metadata serivce')
+                    print('WARN: Azure: Unable to reach metadata serivce')
                     time.sleep(5)
                     continue
                 data = res.read()
@@ -53,7 +53,7 @@ def _requestMetadata(path, verbose = False):
                     return data.decode('iso-8859-1')
     except Exception as e:
         if verbose:
-            print('WARN: Metadata is not available ' + path)
+            print('WARN: Azure: Metadata is not available ' + path)
         return None
 
 def checkLocation():
@@ -78,7 +78,7 @@ def _executeAzTool(*args, data=None):
     try:
         data = json.loads(result.stdout)
     except UnicodeDecodeError as e:
-        print('WARN: Found UnicodeDecodeError during parsing of the az output, switching to ISO-8859-1:', str(e))
+        print('WARN: Azure: Found UnicodeDecodeError during parsing of the az output, switching to ISO-8859-1:', str(e))
         data = json.loads(result.stdout.decode('iso-8859-1'))
     except json.decoder.JSONDecodeError:
         pass
@@ -131,7 +131,7 @@ def initProvider(settings = dict()):
         AZ_CONF['az_exec_path'] = None
         return 'Error during execution of "az" tool'
 
-    print('INFO: Using az tool:', AZ_CONF['az_exec_path'])
+    print('INFO: Azure: Using az tool:', AZ_CONF['az_exec_path'])
 
     return True
 
@@ -168,13 +168,13 @@ def getSettings():
         },
         'storage_account': {
             'name': 'Storage account',
-            'description': '''What kind of storage account to use - in case it's empty will create the new one as "blendnet<session_id>"''',
+            'description': '''What kind of storage account to use - in case it's empty will create the new one as "blendnet{session_id}"''',
             'type': 'string',
             'value': AZ_CONF.get('storage_account'),
         },
         'storage_container': {
             'name': 'Storage container',
-            'description': '''What the storage container to use - in case it's empty will create the new one as "blendnet-<session_id>"''',
+            'description': '''What the storage container to use - in case it's empty will create the new one as "blendnet-{session_id}"''',
             'type': 'string',
             'value': AZ_CONF.get('storage_container'),
         },
@@ -187,7 +187,7 @@ def _getInstanceTypeInfo(name):
         getInstanceTypes()
         return { 'cpu': AZ_CACHE_SIZES[name][0], 'mem': AZ_CACHE_SIZES[name][1] }
     except:
-        print('ERROR: Unable to get the Azure machine type info for:', name)
+        print('ERROR: Azure: Unable to get the Azure machine type info for:', name)
 
     return None
 
@@ -291,13 +291,13 @@ def _createResourceGroup():
 def _createIdentities():
     '''Will ensure the required identities are here'''
 
-    print('INFO: Creating the identity blendnet-agent')
+    print('INFO: Azure: Creating the identity blendnet-agent')
     agent = _executeAzTool('identity', 'create',
                            '--location', AZ_CONF['location'],
                            '--resource-group', AZ_CONF['resource_group'],
                            '--name', 'blendnet-agent')
 
-    print('INFO: Creating the identity blendnet-manager')
+    print('INFO: Azure: Creating the identity blendnet-manager')
     mngr = _executeAzTool('identity', 'create',
                           '--location', AZ_CONF['location'],
                           '--resource-group', AZ_CONF['resource_group'],
@@ -324,12 +324,17 @@ def _createIdentities():
                    '--description', 'Allow to create Agent VMs for BlendNet Manager',
                    '--scope', agent['id'])
 
+    print('INFO: Azure: Created identities')
+
 def createInstanceManager(cfg):
     '''Creating a new instance for BlendNet Manager'''
     _createResourceGroup()
     _createIdentities()
 
     image = 'Debian:debian-10:10:latest'
+
+    account = urllib.parse.urlparse(cfg['storage_url']).hostname.split('.')[0]
+    container = urllib.parse.urlparse(cfg['storage_url']).path.split('/')[-1]
 
     # TODO: make script overridable
     # TODO: too much hardcode here
@@ -395,8 +400,8 @@ systemctl start blendnet-manager.service
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
         session_id=cfg['session_id'],
-        storage_account=cfg['storage_account'],
-        storage_name=cfg['storage_name'],
+        storage_account=account,
+        storage_name=container,
     )
 
     options = [
@@ -415,7 +420,7 @@ systemctl start blendnet-manager.service
     ]
 
     # Creating an instance
-    print('INFO: Creating manager', cfg['instance_name'])
+    print('INFO: Azure: Creating manager', cfg['instance_name'])
     _executeAzTool(*options)
 
     return cfg['instance_name']
@@ -425,6 +430,8 @@ def createInstanceAgent(cfg):
 
     image = 'Debian:debian-10:10:latest'
 
+    account = urllib.parse.urlparse(cfg['storage_url']).hostname.split('.')[0]
+    container = urllib.parse.urlparse(cfg['storage_url']).path.split('/')[-1]
     # TODO: make script overridable
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
@@ -452,7 +459,7 @@ fi
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
 #!/bin/sh
 echo '--> Update the BlendNet agent'
-az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'work_{name}/*' -d "$(getent passwd blendnet-user | cut -d: -f6)"
+az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'work_{instance_name}/*' -d "$(getent passwd blendnet-user | cut -d: -f6)"
 az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv/blendnet
 EOF
 
@@ -487,10 +494,9 @@ systemctl start blendnet-agent.service
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
-        session_id=cfg['session_id'],
-        storage_account=cfg['storage_account'],
-        storage_name=cfg['storage_name'],
-        name=cfg['instance_name'],
+        storage_account=account,
+        storage_name=container,
+        instance_name=cfg['instance_name'],
     )
 
     options = [
@@ -511,7 +517,7 @@ systemctl start blendnet-agent.service
 
     if cfg['use_cheap_instance']:
         # Running in the cheapest zone
-        print('INFO: Running cheap agent instance with max price %f (min %f)' % (
+        print('INFO: Azure: Running cheap agent instance with max price %f (min %f)' % (
             cfg['instance_max_price'],
             getMinimalCheapPrice(cfg['instance_type']),
         ))
@@ -523,7 +529,7 @@ systemctl start blendnet-agent.service
         options.append('Delete')
 
     # Creating an instance
-    print('INFO: Creating agent %s' % (cfg['instance_name'],))
+    print('INFO: Azure: Creating agent %s' % (cfg['instance_name'],))
     _executeAzTool(*options)
 
     return cfg['instance_name']
@@ -548,15 +554,12 @@ def deleteInstance(instance_id):
 
     # Get resources with the res = instance_id
     toremove_ids = _executeAzTool('resource', 'list',
-                                  '--location', AZ_CONF['location'],
-                                  '--resource-group', AZ_CONF['resource_group'],
                                   '--tag', 'vm=' + instance_id, '--query', '[].id')
     if len(toremove_ids) < 6:
-        print('WARNING: Not enough resources for VM to remove (6 needed): %s' % (toremove_ids,))
+        print('WARN: Azure: Not enough resources for VM to remove (6 needed): %s' % (toremove_ids,))
 
     # Remove related resources
     _executeAzTool('resource', 'delete',
-                   '--location', AZ_CONF['location'],
                    '--resource-group', AZ_CONF['resource_group'],
                    '--ids', *toremove_ids)
 
@@ -564,7 +567,7 @@ def createFirewall(target_group, port):
     '''Create minimal firewall to access Manager / Agent'''
 
     # Create the network security group
-    print('INFO: Creating security group for %s' % (target_group,))
+    print('INFO: Azure: Creating security group for %s' % (target_group,))
     _executeAzTool('network', 'nsg', 'create',
                    '--name', target_group,
                    '--location', AZ_CONF['location'],
@@ -592,47 +595,67 @@ def createFirewall(target_group, port):
                    '--destination-port-ranges', str(port),
                    '--destination-address-prefixes', '10.0.0.0/8' if target_group == 'blendnet-agent' else '0.0.0.0/0')
 
-def createStorage(storage_info):
+def createStorage(storage_url):
     '''Creates storage if it's not exists'''
 
     _createResourceGroup()
 
-    print('INFO: Creating storage %s/%s ...' % (storage_info['storage_account'], storage_info['storage_name']))
+    print('INFO: Azure: Creating storage %s ...' % (storage_url,))
+
+    account = urllib.parse.urlparse(storage_url).hostname.split('.')[0]
+    container = urllib.parse.urlparse(storage_url).path.split('/')[-1]
 
     # Using storage account / storage container for azure
     _executeAzTool('storage', 'account', 'create',
-                   '--name', storage_info['storage_account'],
+                   '--name', account,
                    '--location', AZ_CONF['location'],
                    '--resource-group', AZ_CONF['resource_group'])
 
     _executeAzTool('storage', 'container', 'create',
-                   '--name', storage_info['storage_name'],
-                   '--account-name', storage_info['storage_account'])
+                   '--name', container,
+                   '--account-name', account)
 
     return True
 
-def uploadFileToStorage(path, storage_info, dest_path = None):
+def uploadFileToStorage(path, storage_url, dest_path = None):
     '''Upload file to the storage'''
 
-    if not dest_path:
-        dest_path = path
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
 
-    # If the plugin was called from Windows, we need to convert the path separators
-    if platform.system() == 'Windows':
-        dest_path = pathlib.PurePath(dest_path).as_posix()
-
-    print('INFO: Uploading file to %s/%s/%s ...' % (
-        storage_info['storage_account'], storage_info['storage_name'], dest_path))
+    print('INFO: Azure: Uploading file to %s ...' % (storage_url,))
 
     _executeAzTool('storage', 'copy',
                    '--source', path,
-                   '--destination-account-name', storage_info['storage_account'],
-                   '--destination-container', storage_info['storage_name'],
-                   '--destination-blob', dest_path)
+                   '--destination', storage_url)
 
     return True
 
-def uploadDataToStorage(data, storage_info, dest_path):
+def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None, exclude = None):
+    '''Recursively upload files to the storage'''
+
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
+
+    print('INFO: Azure: Uploading files from %s to "%s" ...' % (path, storage_url))
+
+    cmd = ['storage', 'copy', '--recursive', '--source', path, '--destination', storage_url]
+    if include:
+        cmd += ['--include-pattern', include]
+    if exclude:
+        cmd += ['--exclude-pattern', exclude]
+
+    _executeAzTool(*cmd)
+
+    print('INFO: Azure: Uploaded files to "%s"' % (storage_url,))
+
+    return True
+
+def uploadDataToStorage(data, storage_url, dest_path = None):
     '''Upload data to the storage'''
     # WARN: tempfile.NamedTemporaryFile is not allowed to be used by a subprocesses on Win
 
@@ -643,30 +666,34 @@ def uploadDataToStorage(data, storage_info, dest_path):
             fd.write(data)
             fd.flush()
 
-        print('INFO: Uploading data to %s/%s/%s ...' % (
-            storage_info['storage_account'], storage_info['storage_name'], dest_path))
+        if dest_path:
+            if platform.system() == 'Windows':
+                dest_path = pathlib.PurePath(dest_path).as_posix()
+            storage_url += '/' + dest_path
+
+        print('INFO: Azure: Uploading data to "%s" ...' % (storage_url,))
         _executeAzTool('storage', 'copy',
                        '--source', temp_file,
-                       '--destination-account-name', storage_info['storage_account'],
-                       '--destination-container', storage_info['storage_name'],
-                       '--destination-blob', dest_path)
+                       '--destination', storage_url)
 
     return True
 
-def downloadDataFromStorage(storage_info, path):
-    # az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv/blendnet
+def downloadDataFromStorage(storage_url, path = None):
     temp_file = tempfile.NamedTemporaryFile()
 
-    print('INFO: Downloading file from "%s" ...' % (path,))
+    if path:
+        if platform.system() == 'Windows':
+            path = pathlib.PurePath(path).as_posix()
+        storage_url += '/' + path
+
+    print('INFO: Azure: Downloading file from "%s" ...' % (path,))
 
     try:
         _executeAzTool('storage', 'copy',
-                       '--source-account-name', storage_info['storage_account'],
-                       '--source-container', storage_info['storage_name'],
-                       '--source-blob', path,
+                       '--source', storage_url,
                        '--destination', temp_file.name)
     except AzToolException:
-        print('WARN: Download operation failed')
+        print('WARN: Azure: Download operation failed')
         return None
 
     # The original temp_file is unlinked, so reread it
@@ -700,13 +727,13 @@ def getResources(session_id):
         inst = parseInstanceInfo(it)
         if not inst:
             continue
-        it_type = [ tag['Value'] for tag in it['tags'] if tag['Key'] == 'Type' ][0]
+        it_type = it['tags'].get('type')
         if it_type == 'manager':
             out['manager'] = inst
         elif it_type == 'agent':
             out['agents'][inst['name']] = inst
         else:
-            print('WARN: Unknown type resource instance', inst['name'])
+            print('WARN: Azure: Unknown type resource instance', inst['name'])
 
     return out
 
@@ -718,14 +745,14 @@ def getAgentSizeDefault():
     # https://docs.microsoft.com/en-us/azure/virtual-machines/spot-vms#limitations
     return 'Standard_A1_v2'
 
-def getStorageInfo(session_id):
-    '''Returns the azure storage info'''
+def getStorageUrl(session_id):
+    '''Returns the azure storage url'''
     default_account = 'blendnet{session_id}'.format(session_id=session_id.lower())
     default_name = 'blendnet-{session_id}'.format(session_id=session_id.lower())
-    return {
-        'storage_account': (AZ_CONF.get('storage_account') or default_account).format(session_id=session_id),
-        'storage_name': (AZ_CONF.get('storage_container') or default_name).format(session_id=session_id),
-    }
+    return 'https://%s.blob.core.windows.net/%s' % (
+        (AZ_CONF.get('storage_account') or default_account).format(session_id=session_id.lower()),
+        (AZ_CONF.get('storage_container') or default_name).format(session_id=session_id.lower()),
+    )
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id
@@ -761,7 +788,7 @@ def getPrice(inst_type, cheap_multiplier):
         while True:
             with urllib.request.urlopen(req, timeout=5, context=ctx) as res:
                 if res.getcode() == 503:
-                    print('WARN: Unable to reach price url')
+                    print('WARN: Azure: Unable to reach price url')
                     time.sleep(5)
                     continue
                 data = json.load(res)
@@ -782,7 +809,7 @@ def getPrice(inst_type, cheap_multiplier):
 
                 return (-1.0, 'ERR: Unable to find the price')
     except Exception as e:
-        print('WARN: Error during getting the instance type price:', url, e)
+        print('WARN: Azure: Error during getting the instance type price:', url, e)
         return (-1.0, 'ERR: ' + str(e))
 
 def getMinimalCheapPrice(inst_type):

@@ -51,8 +51,8 @@ def getResources(session_id):
 
     return out
 
-def downloadDataFromStorage(storage_info, path):
-    if not path == 'ca.crt':
+def downloadDataFromStorage(storage_url, path):
+    if path != 'ca.crt':
         return
 
     # Check if it's Addon and try to load from manager_ca_path pref
