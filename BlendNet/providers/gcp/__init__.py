@@ -16,8 +16,10 @@ import os.path
 import time
 import pathlib
 import platform
-import urllib.request
+import urllib
 import subprocess
+
+from ...Workers import Workers
 
 METADATA_URL = 'http://metadata.google.internal/computeMetadata/v1/'
 METADATA_HEADER = ('Metadata-Flavor', 'Google')
@@ -151,6 +153,12 @@ def getSettings():
             'description': 'Full path to the gcloud or gcloud.exe from Google Cloud SDK, by default uses PATH env to find it',
             'type': 'path',
             'value': GCP_CONF.get('gcloud_exec_path'),
+        },
+        'bucket_name': {
+            'name': 'Bucket name',
+            'description': '''What the bucket to use - in case it's empty will create the new one as "{project}-blendnet-{session_id}"''',
+            'type': 'string',
+            'value': GCP_CONF.get('bucket_name', ''),
         },
     }
 
@@ -380,9 +388,9 @@ fi
 
 echo '--> Download & run the BlendNet manager'
 adduser --shell /bin/false --disabled-password blendnet-user
-gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/work_manager/*' "$(getent passwd blendnet-user | cut -d: -f6)"
-gsutil -m rm 'gs://{project}-blendnet-{session_id}/work_manager/**'
-gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/blendnet' /srv
+gsutil -m cp -r '{storage_url}/work_manager/*' "$(getent passwd blendnet-user | cut -d: -f6)"
+gsutil -m rm '{storage_url}/work_manager/**'
+gsutil -m cp -r '{storage_url}/blendnet' /srv
 
 cat <<'EOF' > /etc/systemd/system/blendnet-manager.service
 [Unit]
@@ -408,8 +416,7 @@ systemctl start blendnet-manager.service # We don't need "enable" here
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
-        project=configs['project'],
-        session_id=cfg['session_id'],
+        storage_url=cfg['storage_url'],
     )
     #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py' blendnet-user
 
@@ -502,8 +509,8 @@ fi
 
 echo '--> Download & run the BlendNet agent'
 adduser --shell /bin/false --disabled-password blendnet-user
-gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/work_{name}/*' "$(getent passwd blendnet-user | cut -d: -f6)"
-gsutil -m cp -r 'gs://{project}-blendnet-{session_id}/blendnet' /srv
+gsutil -m cp -r '{storage_url}/work_{instance_name}/*' "$(getent passwd blendnet-user | cut -d: -f6)"
+gsutil -m cp -r '{storage_url}/blendnet' /srv
 
 cat <<'EOF' > /etc/systemd/system/blendnet-agent.service
 [Unit]
@@ -529,9 +536,8 @@ systemctl start blendnet-agent.service # We don't need "enable" here
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
-        project=configs['project'],
-        session_id=cfg['session_id'],
-        name=cfg['instance_name'],
+        instance_name=cfg['instance_name'],
+        storage_url=cfg['storage_url'],
     )
     #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py' blendnet-user
 
@@ -683,15 +689,17 @@ def _getBucket(bucket_name):
     except: # TODO: be more specific here - exception could mean anything
         return None
 
-def createStorage(storage_info):
+def createStorage(storage_url):
     '''Creates bucket if it's not exists'''
     storage, configs = _getStorage(), _getConfigs()
 
-    if _getBucket(storage_info['storage_name']):
+    bucket_name = urllib.parse.urlparse(storage_url).hostname
+
+    if _getBucket(bucket_name):
         return True
 
     body = {
-        'name': storage_info['storage_name'],
+        'name': bucket_name,
         'location': configs['region'],
     }
 
@@ -700,59 +708,106 @@ def createStorage(storage_info):
 
     return True
 
-def uploadFileToStorage(path, storage_info, dest_path = None):
+def uploadFileToStorage(path, storage_url, dest_path = None):
     '''Upload file to the bucket'''
     from googleapiclient.http import MediaIoBaseUpload
     storage = _getStorage()
 
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
+
     body = {
-        'name': dest_path or path,
+        'name': urllib.parse.urlparse(storage_url).path.lstrip('/'),
     }
 
-    # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
+    # If the provider was called from Windows, we need to convert the path separators
     if platform.system() == 'Windows':
         body['name'] = pathlib.PurePath(body['name']).as_posix()
 
-    print('INFO: Uploading file to "gs://%s/%s"...' % (storage_info['storage_name'], body['name']))
+    print('INFO: Uploading file to "%s"...' % (storage_url,))
     with open(path, 'rb') as f:
         # TODO: make sure file uploaded or there is an isssue
         storage.objects().insert(
-            bucket=storage_info['storage_name'], body=body,
+            bucket=urllib.parse.urlparse(storage_url).hostname, body=body,
             media_body=MediaIoBaseUpload(f, 'application/octet-stream', chunksize=8*1024*1024),
         ).execute()
 
     return True
 
-def uploadDataToStorage(data, storage_info, dest_path):
+def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None, exclude = None):
+    '''Recursively upload files to the storage'''
+
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
+
+    print('INFO: GCP: Uploading files from %s to "%s" ...' % (path, storage_url))
+
+    workers = Workers(
+        'Uploading BlendNet logic to the storage',
+        8,
+        uploadFileToStorage,
+    )
+
+    # Walk through python files and upload them
+    for root, _, files in os.walk(path):
+        for f in files:
+            if include and not pathlib.PurePath(f).match(include):
+                continue
+            if exclude and pathlib.PurePath(f).match(exclude):
+                continue
+            filepath = os.path.join(root, f)
+            workers.add(filepath, storage_url, filepath.replace(path, dest_path, 1))
+
+    workers.start()
+    workers.wait()
+
+    print('INFO: GCP: Uploaded files to "%s"' % (storage_url,))
+
+    return True
+
+def uploadDataToStorage(data, storage_url, dest_path = None):
     '''Upload file to the bucket'''
     from googleapiclient.http import MediaInMemoryUpload
     storage = _getStorage()
 
+    if dest_path:
+        if platform.system() == 'Windows':
+            dest_path = pathlib.PurePath(dest_path).as_posix()
+        storage_url += '/' + dest_path
+
     body = {
-        'name': dest_path,
+        'name': urllib.parse.urlparse(storage_url).path.lstrip('/'),
     }
 
-    # if the plugin was called from a windows OS, we need to convert the path separators for gsutil
-    if platform.system() == 'Windows':
-        body['name'] = pathlib.PurePath(body['name']).as_posix()
-
-    print('INFO: Uploading data to "gs://%s/%s"...' % (storage_info['storage_name'], body['name']))
-    # TODO: make sure file uploaded or there is an isssue
+    print('INFO: Uploading data to "%s"...' % (storage_url,))
+    # TODO: make sure file uploaded or there is an issue
     storage.objects().insert(
-        bucket=storage_info['storage_name'], body=body,
+        bucket=urllib.parse.urlparse(storage_url).hostname, body=body,
         media_body=MediaInMemoryUpload(data, mimetype='application/octet-stream'),
     ).execute()
 
     return True
 
-def downloadDataFromStorage(storage_info, path):
+def downloadDataFromStorage(storage_url, path = None):
     from googleapiclient.http import MediaIoBaseDownload
     from io import BytesIO
 
     storage = _getStorage()
 
-    print('INFO: Downloading data from "gs://%s/%s"...' % (storage_info['storage_name'], path))
-    req = storage.objects().get_media(bucket=storage_info['storage_name'], object=path)
+    if path:
+        if platform.system() == 'Windows':
+            path = pathlib.PurePath(path).as_posix()
+        storage_url += '/' + path
+
+    print('INFO: Downloading data from "%s"...' % (storage_url,))
+    req = storage.objects().get_media(
+        bucket=urllib.parse.urlparse(storage_url).hostname,
+        object=urllib.parse.urlparse(storage_url).path.lstrip('/')
+    )
     data_fd = BytesIO()
     downloader = MediaIoBaseDownload(data_fd, req, chunksize=8*1024*1024)
 
@@ -822,12 +877,11 @@ def getManagerSizeDefault():
 def getAgentSizeDefault():
     return 'n1-highcpu-2'
 
-def getStorageInfo(session_id):
+def getStorageUrl(session_id):
     '''Returns the gcp bucket info'''
     configs = _getConfigs()
-    return {
-        'storage_name': '%s-blendnet-%s' % (configs['project'], session_id.lower()),
-    }
+    default_name = 'gs://{project}-blendnet-{session_id}'.format(project=configs['project'], session_id=session_id.lower())
+    return 'gs://' + GCP_CONF.get('bucket_name') or default_name
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id

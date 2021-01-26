@@ -1,5 +1,4 @@
 from .InstanceProvider import InstanceProvider
-from ..Workers import Workers
 
 import os
 import traceback
@@ -116,13 +115,17 @@ def getInstanceTypes():
     '''Provides map with information about the available instances'''
     return _execProviderFunc('getInstanceTypes')
 
-def uploadFileToStorage(path, storage_info, dest_path = None):
+def uploadFileToStorage(path, storage_url, dest_path = None):
     '''Uploads file to the network storage'''
-    return _execProviderFunc('uploadFileToStorage', None, path, storage_info, dest_path)
+    return _execProviderFunc('uploadFileToStorage', None, path, storage_url, dest_path)
 
-def uploadDataToStorage(data, storage_info, dest_path):
+def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None, exclude = None):
+    '''Recursively upload files to the storage'''
+    return _execProviderFunc('uploadRecursiveToStorage', None, path, storage_url, dest_path, include, exclude)
+
+def uploadDataToStorage(data, storage_url, dest_path = None):
     '''Uploads data to the network storage'''
-    return _execProviderFunc('uploadDataToStorage', None, data, storage_info, dest_path)
+    return _execProviderFunc('uploadDataToStorage', None, data, storage_url, dest_path)
 
 def getResources(session_id):
     '''Returns map of allocated resources - manager and agents'''
@@ -133,8 +136,8 @@ def getNodeLog(instance_id):
     '''Returns string with the node serial output log'''
     return _execProviderFunc('getNodeLog', 'NOT IMPLEMENTED', instance_id)
 
-def getStorageInfo(session_id):
-    return _execProviderFunc('getStorageInfo', None, session_id)
+def getStorageUrl(session_id):
+    return _execProviderFunc('getStorageUrl', None, session_id)
 
 def getManagerName(session_id):
     return _execProviderFunc('getManagerName', 'blendnet-%s-manager' % session_id, session_id)
@@ -168,39 +171,24 @@ def destroyInstance(inst_id):
 def deleteInstance(inst_id):
     return _execProviderFunc('deleteInstance', '', inst_id)
 
-def downloadDataFromStorage(storage_info, path):
-    return _execProviderFunc('downloadDataFromStorage', None, storage_info, path)
+def downloadDataFromStorage(storage_url, path = None):
+    return _execProviderFunc('downloadDataFromStorage', None, storage_url, path)
 
 def createFirewall(target_tag, port):
     return _execProviderFunc('createFirewall', None, target_tag, port)
 
-def setupStorage(storage_info, cfg):
+def setupStorage(storage_url, cfg):
     '''Creating the storage and uploads the blendnet and configs into'''
     print('INFO: Uploading BlendNet logic to the storage')
 
-    _execProviderFunc('createStorage', None, storage_info)
+    _execProviderFunc('createStorage', None, storage_url)
 
-    workers = Workers(
-        'Uploading BlendNet logic to the storage',
-        8,
-        uploadFileToStorage,
-    )
-
-    # Walk through python files and upload them
+    # Upload BlendNet logic from the addon
     dirpath = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    for root, _, files in os.walk(dirpath):
-        for f in files:
-            if not f.endswith('.py'):
-                continue
-            filepath = os.path.join(root, f)
-            workers.add(filepath, storage_info, filepath.replace(dirpath, 'blendnet', 1))
-
-    workers.start()
-
+    uploadRecursiveToStorage(dirpath, storage_url, 'blendnet', '*.py')
+    
     import json
-    uploadDataToStorage(json.dumps(cfg).encode('utf-8'), storage_info, 'work_manager/manager.json')
-
-    workers.wait()
+    uploadDataToStorage(json.dumps(cfg).encode('utf-8'), storage_url, 'work_manager/manager.json')
 
 def getCheapMultiplierList():
     '''Returns the list of available multipliers to get the right price'''
