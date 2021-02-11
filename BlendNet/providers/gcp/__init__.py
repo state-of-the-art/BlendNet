@@ -364,7 +364,6 @@ systemctl start blendnet-manager.service # We don't need "enable" here
     data = {
         'name': cfg['instance_name'],
         'machineType': machine,
-        'minCpuPlatform': 'Intel Skylake', # Using the best option
         'description': 'BlendNet Agents Manager',
         'labels': {
             'app': 'blendnet',
@@ -487,7 +486,6 @@ systemctl start blendnet-agent.service # We don't need "enable" here
     data = {
         'name': cfg['instance_name'],
         'machineType': machine,
-        'minCpuPlatform': 'Intel Skylake', # Using the best option
         'description': 'BlendNet Agent worker',
         'scheduling': {
             'preemptible': cfg['use_cheap_instance'],
