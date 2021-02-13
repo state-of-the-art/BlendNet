@@ -411,17 +411,14 @@ class BlendNetToggleManager(bpy.types.Operator):
     bl_label = ''
     bl_description = 'Start/Stop manager instance'
 
-    retry_counter: IntProperty(default=50)
-
     _timer = None
     _last_run = 0
 
     @classmethod
     def poll(cls, context):
-        return context.window_manager.blendnet.status == 'idle'
+        return context.window_manager.blendnet.status == 'idle' or BlendNet.addon.isManagerStarted()
 
     def invoke(self, context, event):
-        self.retry_counter = 50
         wm = context.window_manager
         BlendNet.addon.toggleManager()
 
@@ -449,13 +446,6 @@ class BlendNetToggleManager(bpy.types.Operator):
 
     def execute(self, context):
         wm = context.window_manager
-
-        self.retry_counter -= 1
-        if self.retry_counter < 0:
-            self.report({'ERROR'}, 'BlendNet Manager operation reached maximum retries - something bad happened '
-                                   'on "%s" stage. Please consult the documentation' % wm.blendnet.status)
-            wm.blendnet.status = 'idle'
-            return {'FINISHED'}
 
         if wm.blendnet.status == 'Manager starting...':
             if not BlendNet.addon.isManagerStarted():
