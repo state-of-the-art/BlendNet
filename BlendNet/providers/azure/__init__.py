@@ -206,23 +206,23 @@ def _verifyQuotas(avail):
 
     # Manager
     if manager_info:
-        if avail['Total vCPUs'] < manager_info['cpu']:
+        if avail.get('Total vCPUs', 0) < manager_info['cpu']:
             errors.append('Available "Total vCPUs" is too small to provision the Manager')
-        if avail['IP Addresses'] < 1: # External addresses
+        if avail.get('IP Addresses', 0) < 1: # External addresses
             errors.append('Available "Public IP Addresses" is too small to provision the Manager')
     else:
         errors.append('Unable to get the Manager type info to validate quotas')
 
     # Agents
     if agents_info:
-        if avail['Total vCPUs'] < agents_info['cpu'] * agents_num:
+        if avail.get('Total vCPUs', 0) < agents_info['cpu'] * agents_num:
             errors.append('Available "Total vCPUs" is too small to provision the Agents')
     else:
         errors.append('Unable to get the Agents type info to validate quotas')
 
     # Common
     if manager_info and agents_info:
-        if avail['Virtual Machines'] < 1 + agents_num:
+        if avail.get('Virtual Machines', 0) < 1 + agents_num:
             errors.append('Available "Virtual Machines" is too small to provision the Manager and Agents')
     else:
         errors.append('Unable to get the Manager and Agents type info to validate quotas')
@@ -236,28 +236,28 @@ def getProviderInfo():
     configs = dict()
     try:
         useful_quotas = {
-            'Total Regional vCPUs': 'Total vCPUs',
-            'Virtual Machines': 'Virtual Machines',
-            'Public IP Addresses': 'IP Addresses',
+            'cores': 'Total vCPUs',
+            'virtualMachines': 'Virtual Machines',
+            'PublicIPAddresses': 'IP Addresses',
         }
 
         avail = {}
 
-        # VM
+        # VM quotas
         data = _executeAzTool('vm', 'list-usage', '--location', AZ_CONF['location'])
 
         for q in data:
-            if q['localName'] in useful_quotas:
-                avail[useful_quotas[q['localName']]] = float(q['limit']) - float(q['currentValue'])
-                configs['Quota: ' + useful_quotas[q['localName']]] = '%s, usage: %s' % (q['limit'], q['currentValue'])
+            if q['name']['value'] in useful_quotas:
+                avail[useful_quotas[q['name']['value']]] = float(q['limit']) - float(q['currentValue'])
+                configs['Quota: ' + useful_quotas[q['name']['value']]] = '%s, usage: %s' % (q['limit'], q['currentValue'])
 
-        # Network
+        # Network quotas
         data = _executeAzTool('network', 'list-usages', '--location', AZ_CONF['location'])
 
         for q in data:
-            if q['localName'] in useful_quotas:
-                avail[useful_quotas[q['localName']]] = float(q['limit']) - float(q['currentValue'])
-                configs['Quota: ' + useful_quotas[q['localName']]] = '%s, usage: %s' % (q['limit'], q['currentValue'])
+            if q['name']['value'] in useful_quotas:
+                avail[useful_quotas[q['name']['value']]] = float(q['limit']) - float(q['currentValue'])
+                configs['Quota: ' + useful_quotas[q['name']['value']]] = '%s, usage: %s' % (q['limit'], q['currentValue'])
 
         errors = _verifyQuotas(avail)
         if errors:
@@ -343,7 +343,10 @@ echo '--> Check for blender dependencies'
 dpkg -l libxrender1 libxi6 libgl1
 if [ $? -gt 0 ]; then
     apt update
-    apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+    until apt install --no-install-recommends -y libxrender1 libxi6 libgl1; do
+        echo "Unable to install blender dependencies, repeating..."
+        sleep 5
+    done
 fi
 
 if [ ! -x /srv/blender/blender ]; then
@@ -361,11 +364,19 @@ if ! which az; then
 fi
 
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
-#!/bin/sh
+#!/bin/sh -e
+
+# Login to identity
+az login --identity
+
 echo '--> Update the BlendNet manager'
 az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'work_manager/*' -d "$(getent passwd blendnet-user | cut -d: -f6)"
-az storage remove --recursive --account-name {storage_account} --container-name {storage_name} --name work_manager
-az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv/blendnet
+# Remove not working due to exception: Exception: MSI auth not yet supported.
+# az storage remove --recursive --account-name {storage_account} --container-name {storage_name} --name work_manager
+az storage blob delete-batch --account-name {storage_account} --source {storage_name} --pattern 'work_manager/*'
+az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv
+
+chown -R blendnet-user .azure .azcopy
 EOF
 
 chmod +x /usr/local/bin/blendnet_cloud_init.sh
@@ -377,11 +388,10 @@ Description=BlendNet Manager Service
 After=network-online.target google-network-daemon.service
 
 [Service]
-PermissionsStartOnly=true
 User=blendnet-user
 WorkingDirectory=~
 Type=simple
-ExecStartPre=/usr/local/bin/blendnet_cloud_init.sh
+ExecStartPre=+/usr/local/bin/blendnet_cloud_init.sh
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/manager.py
 Restart=always
 TimeoutStopSec=60
@@ -439,7 +449,10 @@ echo '--> Check for blender dependencies'
 dpkg -l libxrender1 libxi6 libgl1
 if [ $? -gt 0 ]; then
     apt update
-    apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+    until apt install --no-install-recommends -y libxrender1 libxi6 libgl1; do
+        echo "Unable to install blender dependencies, repeating..."
+        sleep 5
+    done
 fi
 
 if [ ! -x /srv/blender/blender ]; then
@@ -457,10 +470,16 @@ if ! which az; then
 fi
 
 cat <<'EOF' > /usr/local/bin/blendnet_cloud_init.sh
-#!/bin/sh
+#!/bin/sh -e
+
+# Login to identity
+az login --identity
+
 echo '--> Update the BlendNet agent'
 az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'work_{instance_name}/*' -d "$(getent passwd blendnet-user | cut -d: -f6)"
-az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv/blendnet
+az storage copy --recursive --source-account-name {storage_account} --source-container {storage_name} --source-blob 'blendnet' -d /srv
+
+chown -R blendnet-user .azure .azcopy
 EOF
 
 chmod +x /usr/local/bin/blendnet_cloud_init.sh
@@ -472,11 +491,10 @@ Description=BlendNet Agent Service
 After=network-online.target google-network-daemon.service
 
 [Service]
-PermissionsStartOnly=true
 User=blendnet-user
 WorkingDirectory=~
 Type=simple
-ExecStartPre=/usr/local/bin/blendnet_cloud_init.sh
+ExecStartPre=+/usr/local/bin/blendnet_cloud_init.sh
 ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
 Restart=always
 TimeoutStopSec=20
@@ -506,7 +524,7 @@ systemctl start blendnet-agent.service
         '--image', image,
         '--size', cfg['instance_type'],
         '--os-disk-size-gb', '200',
-        '--generate-ssh-keys', # Or use '--admin-username', 'blendnet-admin', '--ssh-key-values', '@/home/user/.ssh/id_rsa.pub',
+        '--generate-ssh-keys', # Or use '--admin-username', 'blendnet-admin', '--ssh-key-values', '<place_pubkey_here>',
         '--assign-identity', 'blendnet-agent',
         '--nsg', 'blendnet-agent',
         '--public-ip-address', '', # Disable public IP address for the agent
@@ -555,8 +573,8 @@ def deleteInstance(instance_id):
     # Get resources with the res = instance_id
     toremove_ids = _executeAzTool('resource', 'list',
                                   '--tag', 'vm=' + instance_id, '--query', '[].id')
-    if len(toremove_ids) < 6:
-        print('WARN: Azure: Not enough resources for VM to remove (6 needed): %s' % (toremove_ids,))
+    if len(toremove_ids) < 5:
+        print('WARN: Azure: Not enough resources for VM to remove (5 needed): %s' % (toremove_ids,))
 
     # Remove related resources
     _executeAzTool('resource', 'delete',
@@ -578,7 +596,7 @@ def createFirewall(target_group, port):
                    '--resource-group', AZ_CONF['resource_group'],
                    '--nsg-name', target_group,
                    '--priority', '1000',
-                   '--access', 'Deny', # Change to 'Allow' in case you need SSH access
+                   '--access', 'Deny', # Change 'Deny' to 'Allow' in case you need SSH access
                    '--direction', 'Inbound',
                    '--protocol', 'Tcp',
                    '--destination-port-ranges', '22',
@@ -611,9 +629,19 @@ def createStorage(storage_url):
                    '--location', AZ_CONF['location'],
                    '--resource-group', AZ_CONF['resource_group'])
 
+    # Wait for account
+    while _executeAzTool('storage', 'account', 'check-name',
+                         '--name', account).get('nameAvailable'):
+        print('DEBUG: Azure: Waiting for account creation')
+
     _executeAzTool('storage', 'container', 'create',
                    '--name', container,
                    '--account-name', account)
+
+    # Wait for container
+    while not _executeAzTool('storage', 'container', 'exists',
+                             '--name', container, '--account-name', account).get('exists'):
+        print('DEBUG: Azure: Waiting for container creation')
 
     return True
 
@@ -625,10 +653,14 @@ def uploadFileToStorage(path, storage_url, dest_path = None):
             dest_path = pathlib.PurePath(dest_path).as_posix()
         storage_url += '/' + dest_path
 
+    # Weird bug in az copy, it don't like relative paths not started with dir
+    if not os.path.isabs(path):
+        path = os.path.join('.', path)
+
     print('INFO: Azure: Uploading file to %s ...' % (storage_url,))
 
     _executeAzTool('storage', 'copy',
-                   '--source', path,
+                   '--source-local-path', path,
                    '--destination', storage_url)
 
     return True
@@ -643,7 +675,7 @@ def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None
 
     print('INFO: Azure: Uploading files from %s to "%s" ...' % (path, storage_url))
 
-    cmd = ['storage', 'copy', '--recursive', '--source', path, '--destination', storage_url]
+    cmd = ['storage', 'copy', '--recursive', '--source-local-path', os.path.join(path, '*'), '--destination', storage_url]
     if include:
         cmd += ['--include-pattern', include]
     if exclude:
@@ -673,7 +705,7 @@ def uploadDataToStorage(data, storage_url, dest_path = None):
 
         print('INFO: Azure: Uploading data to "%s" ...' % (storage_url,))
         _executeAzTool('storage', 'copy',
-                       '--source', temp_file,
+                       '--source-local-path', temp_file,
                        '--destination', storage_url)
 
     return True
@@ -691,7 +723,7 @@ def downloadDataFromStorage(storage_url, path = None):
     try:
         _executeAzTool('storage', 'copy',
                        '--source', storage_url,
-                       '--destination', temp_file.name)
+                       '--destination-local-path', temp_file.name)
     except AzToolException:
         print('WARN: Azure: Download operation failed')
         return None
@@ -738,7 +770,7 @@ def getResources(session_id):
     return out
 
 def getManagerSizeDefault():
-    return 'Standard_B1ls'
+    return 'Standard_A1_v2'
 
 def getAgentSizeDefault():
     # Standard_B and some other are not support Spot VMs
