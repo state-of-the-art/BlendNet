@@ -264,9 +264,9 @@ class ManagerAgentWorker(object):
 
         if self.state() in (ManagerAgentState.STOPPED, ManagerAgentState.DESTROYED):
             # Agent will need config files right after the start
-            providers.uploadFileToStorage('%s.key' % self._name, self._cfg.storage_url, 'work_%s/server.key' % self._name)
-            providers.uploadFileToStorage('%s.crt' % self._name, self._cfg.storage_url, 'work_%s/server.crt' % self._name)
-            providers.uploadDataToStorage(json.dumps(self._cfg).encode('utf-8'), self._cfg.storage_url, 'work_%s/agent.json' % self._name)
+            providers.uploadFileToStorage('%s.key' % self._name, self._cfg['storage_url'], 'work_%s/server.key' % self._name)
+            providers.uploadFileToStorage('%s.crt' % self._name, self._cfg['storage_url'], 'work_%s/server.crt' % self._name)
+            providers.uploadDataToStorage(json.dumps(self._cfg).encode('utf-8'), self._cfg['storage_url'], 'work_%s/agent.json' % self._name)
 
         if self.state() == ManagerAgentState.STOPPED:
             print('DEBUG: Starting the existing agent instance "%s"' % self._name)

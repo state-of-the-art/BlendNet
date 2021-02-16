@@ -303,6 +303,15 @@ def _createIdentities():
                           '--resource-group', AZ_CONF['resource_group'],
                           '--name', 'blendnet-manager')
 
+    # Create assignments after idenities, because they take some time appear
+
+    # Use Reader access for Agent to download data from containers
+    _executeAzTool('role', 'assignment', 'create',
+                   '--role', 'Reader and Data Access',
+                   '--assignee-object-id', agent['principalId'],
+                   '--description', 'Allow to download from storage for BlendNet Agent',
+                   '--resource-group', AZ_CONF['resource_group'])
+
     # Use Network access for Manager to create VM
     _executeAzTool('role', 'assignment', 'create',
                    '--role', 'Network Contributor',
@@ -421,7 +430,7 @@ systemctl start blendnet-manager.service
         '--image', image,
         '--size', cfg['instance_type'],
         '--os-disk-size-gb', '200',
-        '--generate-ssh-keys', # Or use '--admin-username', 'blendnet-admin', '--ssh-key-values', '@/home/user/.ssh/id_rsa.pub',
+        '--generate-ssh-keys', # For ssh access use '--admin-username', 'blendnet-admin', '--ssh-key-values', '@/home/user/.ssh/id_rsa.pub',
         '--assign-identity', 'blendnet-manager',
         '--nsg', 'blendnet-manager',
         '--custom-data', startup_script,
@@ -524,17 +533,17 @@ systemctl start blendnet-agent.service
         '--image', image,
         '--size', cfg['instance_type'],
         '--os-disk-size-gb', '200',
-        '--generate-ssh-keys', # Or use '--admin-username', 'blendnet-admin', '--ssh-key-values', '<place_pubkey_here>',
+        '--generate-ssh-keys', # For ssh access use '--admin-username', 'blendnet-admin', '--ssh-key-values', '<place_pubkey_here>',
         '--assign-identity', 'blendnet-agent',
         '--nsg', 'blendnet-agent',
-        '--public-ip-address', '', # Disable public IP address for the agent
+        '--public-ip-address', '', # Disable public IP address for the agent (comment it for ssh access)
         '--custom-data', startup_script,
         # "vm" tag is used to remove the related VM resources
         '--tags', 'app=blendnet', 'session_id='+cfg['session_id'], 'type=agent', 'vm='+cfg['instance_name'],
     ]
 
     if cfg['use_cheap_instance']:
-        # Running in the cheapest zone
+        # Running cheap instance
         print('INFO: Azure: Running cheap agent instance with max price %f (min %f)' % (
             cfg['instance_max_price'],
             getMinimalCheapPrice(cfg['instance_type']),
@@ -542,7 +551,7 @@ systemctl start blendnet-agent.service
         options.append('--priority')
         options.append('Spot')
         options.append('--max-price')
-        options.append(cfg['instance_max_price'])
+        options.append(str(cfg['instance_max_price']))
         options.append('--eviction-policy')
         options.append('Delete')
 
