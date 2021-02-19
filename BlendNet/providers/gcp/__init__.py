@@ -229,19 +229,13 @@ def _verifyQuotas(avail):
     else:
         errors.append('Unable to get the manager type info to validate quotas')
 
-    # Disable cheap instances if preemptible cpus is not available
-    if avail['region']['PREEMPTIBLE_CPUS'] < 1:
-        errors.append('PREEMPTIBLE_CPUS is zero - cheap instances disabled')
-        # TODO: Unify validation between providers
-        # Required to get UI element disabled
-        errors.append('Cheap instances not available')
-        prefs.agent_use_cheap_instance = False
-
     # Agents
     if agents_info:
         if prefs.agent_use_cheap_instance:
-            if avail['region']['PREEMPTIBLE_CPUS'] < agents_info['cpu'] * agents_num:
-                errors.append('Available region PREEMPTIBLE_CPUS is too small to provision the agents')
+            if avail['region']['PREEMPTIBLE_CPUS'] + avail['region']['CPUS'] - manager_info['cpu'] < agents_info['cpu'] * agents_num:
+                errors.append('Available region CPUS and PREEMPTIBLE_CPUS is too small to provision the agents')
+            if avail['region']['PREEMPTIBLE_CPUS'] + avail['project']['CPUS_ALL_REGIONS'] - manager_info['cpu'] < agents_info['cpu'] * agents_num:
+                errors.append('Available project CPUS_ALL_REGIONS and PREEMPTIBLE_CPUS is too small to provision the agents')
         else:
             if avail['project']['CPUS_ALL_REGIONS'] < agents_info['cpu'] * agents_num + manager_info['cpu']:
                 errors.append('Available project CPUS_ALL_REGIONS is too small to provision the agents')
