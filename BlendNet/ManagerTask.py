@@ -8,6 +8,7 @@ Description: Task used by Manager to control jobs
 import os
 import time
 import threading
+import subprocess
 import statistics # Calculate good remaining time
 
 from .TaskBase import TaskConfig, TaskState, TaskBase
@@ -230,7 +231,7 @@ class ManagerTask(TaskBase):
         outs = ''
         errs = ''
         try:
-            outb, errb = process.communicate(timeout=60)
+            outb, errb = process.communicate(timeout=360)
         except subprocess.TimeoutExpired:
             proc.kill()
             outb, errb = proc.communicate()
