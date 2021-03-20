@@ -15,8 +15,8 @@ Expand-Archive blender-dist.zip
 mv blender-dist\* blender
 
 echo "Download the openssl dist"
-$disturl = 'https://bintray.com/vszakats/generic/download_file?file_path=openssl-1.1.1g-win64-mingw.zip'
-$disthash = '82ac63a9b0897a5707dd0cd5a67bb41d1e46066859fcfddfc0082a340ba08b6a'
+$disturl = 'https://curl.se/windows/dl-7.75.0_4/openssl-1.1.1j_4-win64-mingw.zip'
+$disthash = 'a4a17651456324b79f2a00b0f978edfa1d93a282bbdf197492c394e89a3f9b25'
 $wc.DownloadFile($disturl, "openssl-dist.zip")
 $FileHash = Get-FileHash openssl-dist.zip -Algorithm SHA256
 $FileHash.Hash -eq $disthash
