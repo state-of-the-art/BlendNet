@@ -20,7 +20,12 @@ def getDependencies(project_path, cwd_path, change = False):
     # * project_path - absolute path to the project on the client system
     # * cwd_path - absolute path to the current working directory on the client system
     # * change - replace the path in blend project with the changed one
-    good, bad = checkImages(project_path, cwd_path, change)
+
+    good, bad = checkLibraries(project_path, cwd_path, change)
+
+    data = checkImages(project_path, cwd_path, change)
+    good = good.union(data[0])
+    bad = bad.union(data[1])
 
     data = checkCaches(project_path, cwd_path, change)
     good = good.union(data[0])
@@ -48,6 +53,26 @@ def fixPath(path, project_path, cwd_path, change):
 
     return newpath
 
+def checkLibraries(project_path, cwd_path, change):
+    '''Will go through linked libraries, check they are existing and return good and bad set of files'''
+    good = set()
+    bad = set()
+
+    for l in bpy.data.libraries:
+        path = fixPath(l.filepath, project_path, cwd_path, change)
+        if not os.path.isfile(bpy.path.abspath(path)):
+            print('ERROR: Unable to locate the library file:', path)
+            bad.add(path)
+            continue
+        if change:
+            # Do not change the linked resources
+            if not l.is_library_indirect:
+                l.filepath = path
+
+        good.add(path)
+
+    return good, bad
+
 def checkImages(project_path, cwd_path, change):
     '''Will go through images, check they are existing and return good and bad set of files'''
     good = set()
@@ -57,13 +82,15 @@ def checkImages(project_path, cwd_path, change):
         if i.packed_file or i.source != 'FILE':
             continue
 
-        path = fixPath(i.filepath, project_path, cwd_path, change)
+        path = fixPath(i.filepath_from_user(), project_path, cwd_path, change)
         if not os.path.isfile(bpy.path.abspath(path)):
             print('ERROR: Unable to locate the image file:', path)
-            bad.add(i.filepath)
+            bad.add(path)
             continue
         if change:
-            i.filepath = path
+            # Do not change the linked resources
+            if not i.is_library_indirect:
+                i.filepath = path
 
         good.add(path)
 
