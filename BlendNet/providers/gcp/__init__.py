@@ -453,17 +453,52 @@ def createInstanceAgent(cfg):
     # TODO: option to specify prefix/suffix for the name
     machine = 'zones/%s/machineTypes/%s' % (configs['zone'], cfg['instance_type'])
     # TODO: add option to specify the image to use
-    #image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
-    image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
+    # image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-minimal-1804-lts').execute()
+    # image_res = compute.images().getFromFamily(project='debian-cloud', family='debian-10').execute()
+
+    # image_custom = 'ubuntu-os-cuda' # TODO should be from ui
+    image_custom = 'ubuntu-os-cloud' # TODO temporary workaround but there need to be some logic to select image
+    image_res = compute.images().get(project=configs['project'], image=image_custom).execute()
+    # image_res = compute.images().getFromFamily(project='ubuntu-os-cloud', family='ubuntu-2004-lts').execute()
+
+    accelerator_type = 'nvidia-tesla-p4'  # TODO: should be define from ui.
+    gpu_acc_type = compute.acceleratorTypes().get(project=configs['project'], zone=configs['zone'], acceleratorType=accelerator_type).execute()
+    gpu_acc_count = 1
 
     # TODO: make script overridable
     # TODO: too much hardcode here
     startup_script = '''#!/bin/sh
+echo '--> GPU CUDA ====================================================================='
+
+if [ ! -x /usr/bin/nvidia-smi ]; then
+    echo '--> Installing CUDA for GPU dependencies'
+
+    curl -O https://developer.download.nvidia.com/compute/cuda/repos/{cuda_ubuntu_version}/x86_64/cuda-{cuda_ubuntu_version}.pin
+    mv cuda-{cuda_ubuntu_version}.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/{cuda_ubuntu_version}/x86_64/{cuda_pub_key}.pub
+    add-apt-repository "deb http://developer.download.nvidia.com/compute/cuda/repos/{cuda_ubuntu_version}/x86_64/ /"
+
+    apt-get -qq update
+    apt-get -yq install cuda
+
+    nvidia-smi
+
+    echo '--> CUDA Driver Installed -- Shutting Down Now!' 
+
+    shutdown -r now 
+else
+    echo '--> CUDA Driver OK' 
+
+    nvidia-smi
+fi
+
+echo '--> BLENDER ======================================================================'
+
 echo '--> Check for blender dependencies'
 dpkg -l libxrender1 libxi6 libgl1
 if [ $? -gt 0 ]; then
-    apt update
-    apt install --no-install-recommends -y libxrender1 libxi6 libgl1
+    apt -qq update
+    apt install --no-install-recommends -yq libxrender1 libxi6 libgl1
 fi
 
 if [ ! -x /srv/blender/blender ]; then
@@ -488,7 +523,7 @@ After=network-online.target google-network-daemon.service
 User=blendnet-user
 WorkingDirectory=~
 Type=simple
-ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py
+ExecStart=/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py --debug-gpu --debug-memory --debug-cycles --debug-gpumem 
 Restart=always
 TimeoutStopSec=20
 StandardOutput=syslog
@@ -500,12 +535,16 @@ EOF
 
 systemctl daemon-reload
 systemctl start blendnet-agent.service # We don't need "enable" here
+
+echo '--> GPU BLENDNET COMPLETE ========================================================'
     '''.format(
         blender_url=cfg['dist_url'],
         blender_sha256=cfg['dist_checksum'],
         project=configs['project'],
         session_id=cfg['session_id'],
         name=cfg['instance_name'],
+        cuda_ubuntu_version='ubuntu2004',
+        cuda_pub_key='7fa2af80',
     )
     #su -l -s /bin/sh -c '/srv/blender/blender -b -noaudio -P /srv/blendnet/agent.py' blendnet-user
 
@@ -515,6 +554,8 @@ systemctl start blendnet-agent.service # We don't need "enable" here
         'description': 'BlendNet Agent worker',
         'scheduling': {
             'preemptible': cfg['use_cheap_instance'],
+            'onHostMaintenance': 'TERMINATE',
+            'automaticRestart': True,
         },
         'labels': {
             'app': 'blendnet',
@@ -532,6 +573,10 @@ systemctl start blendnet-agent.service # We don't need "enable" here
                 'diskSizeGb': '200',
             },
         }],
+        'guestAccelerators': [{
+            'acceleratorCount': gpu_acc_count,
+            'acceleratorType': gpu_acc_type['selfLink'],
+        }],
         'networkInterfaces': [{
             'network': 'global/networks/default', # TODO: a way to specify network to use
             'accessConfigs': [{
@@ -546,8 +591,8 @@ systemctl start blendnet-agent.service # We don't need "enable" here
                 'https://www.googleapis.com/auth/devstorage.read_only',
                 'https://www.googleapis.com/auth/logging.write',
                 'https://www.googleapis.com/auth/monitoring.write',
-                'https://www.googleapis.com/auth/servicecontrol',
                 'https://www.googleapis.com/auth/service.management.readonly',
+                'https://www.googleapis.com/auth/servicecontrol',
                 'https://www.googleapis.com/auth/trace.append',
             ],
         }],
