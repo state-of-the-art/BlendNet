@@ -6,6 +6,7 @@ Description: Common utils for BlendNet
 '''
 
 import os
+import time
 import platform
 
 # Unfortunately built-in python path functions are platform-dependent
@@ -48,3 +49,26 @@ def resolvePath(path):
         return os.path.abspath('/'+path)[1:]
     else:
         return os.path.abspath(path)
+
+class CopyStringIO:
+    '''Class to store the logs to get them with timestamps later'''
+    def __init__(self, orig_out, copy_out, copy_out_lock):
+        self._orig_out = orig_out
+        self._copy_out = copy_out
+        self._copy_out_lock = copy_out_lock
+    def write(self, buf):
+        self._orig_out.write(buf)
+        with self._copy_out_lock:
+            key = str(time.time())
+            while key in self._copy_out:
+                key = str(float(key)+0.00001)
+            self._copy_out[key] = buf
+            if len(self._copy_out) > 100000:
+                to_remove_keys = sorted(self._copy_out.keys())[0:10000]
+                for key in to_remove_keys:
+                    del self._copy_out[key]
+    def flush(self):
+        self._orig_out.flush()
+
+    def isatty(self):
+        return self._orig_out.isatty()

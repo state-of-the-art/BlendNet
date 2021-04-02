@@ -4,6 +4,7 @@
 '''
 
 import os
+import sys
 import bpy
 import time
 import threading
@@ -16,9 +17,21 @@ import tempfile
 from datetime import datetime
 
 from . import providers
+from . import utils
 from . import ManagerClient
 from .Workers import Workers
 from .list_blender_versions import getBlenderVersions
+
+addon_log = dict()
+addon_log_lock = threading.Lock()
+def initAddonLog():
+    '''Intercept the stdout/err to capture the log out and exceptions'''
+    global addon_log, addon_log_lock
+    sys.stdout = utils.CopyStringIO(sys.__stdout__, addon_log, addon_log_lock)
+    sys.stderr = utils.CopyStringIO(sys.__stderr__, addon_log, addon_log_lock)
+
+def getAddonLog():
+    return addon_log
 
 def selectProvider(provider):
     '''Sets the current provider identifier'''
