@@ -140,10 +140,14 @@ def _getCreds():
     global GOOGLE_CLOUD_SDK_CREDS
     if not GOOGLE_CLOUD_SDK_CREDS:
         from googlecloudsdk.core.credentials import store
-        store.DevShellCredentialProvider().Register()
+        try:
+            # The DevShellCredentialProvider is removed in gcloud SDK 329.0.0
+            store.DevShellCredentialProvider().Register()
+        except:
+            pass
         store.GceCredentialProvider().Register()
         GOOGLE_CLOUD_SDK_CREDS = store.LoadIfEnabled()
-    elif GOOGLE_CLOUD_SDK_CREDS.access_token_expired:
+    elif GOOGLE_CLOUD_SDK_CREDS.expired:
         print('DEBUG: Updating credentials token')
         from googlecloudsdk.core.credentials import store
         GOOGLE_CLOUD_SDK_CREDS = store.LoadIfEnabled()
