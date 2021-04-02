@@ -782,6 +782,51 @@ class BlendNetGetNodeLogOperation(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class BlendNetGetAddonLogOperation(bpy.types.Operator):
+    bl_idname = 'blendnet.getaddonlog'
+    bl_label = 'Get BlendNet Addon Log'
+    bl_description = 'Show the running BlendNet addon log information'
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+
+        out = BlendNet.addon.getAddonLog()
+        prefix = 'addon'
+
+        if not out:
+            self.report({'ERROR'}, 'No log data found for ' + prefix)
+            return {'CANCELLED'}
+
+        data = []
+        line = ''
+        for t, l in out.items():
+            if not l.endswith('\n'):
+                line += l
+                continue
+            time_str = datetime.fromtimestamp(round(float(t), 3)).strftime('%y.%m.%d %H:%M:%S.%f')
+            data.append(time_str + '\t' + line + l)
+            line = ''
+        if line:
+            data.append('{not completed line}\t' + line)
+
+        data = ''.join(data)
+
+        def drawPopup(self, context):
+            layout = self.layout
+
+            if BlendNet.addon.showLogWindow(prefix, data):
+                layout.label(text='Don\'t forget to unlink the file if you don\'t want it to stay in blend file.')
+            else:
+                layout.label(text='Unable to show the log window', icon='ERROR')
+
+        wm.popup_menu(drawPopup, title='Log for ' + prefix, icon='INFO')
+
+        return {'FINISHED'}
+
 class BlendNetGetServiceLogOperation(bpy.types.Operator):
     bl_idname = 'blendnet.getservicelog'
     bl_label = 'Get Service Log'
@@ -789,7 +834,7 @@ class BlendNetGetServiceLogOperation(bpy.types.Operator):
 
     agent_name: StringProperty(
         name = 'Name of Agent',
-        description = 'Name of Agent to get log from or Manager will be used',
+        description = 'Name of Agent (or Manager by default) to get the log from',
         default = ''
     )
 
@@ -834,7 +879,7 @@ class BlendNetGetServiceLogOperation(bpy.types.Operator):
             else:
                 layout.label(text='Unable to show the log window', icon='ERROR')
 
-        wm.popup_menu(drawPopup, title='Log for manager', icon='INFO')
+        wm.popup_menu(drawPopup, title='Log for' + prefix, icon='INFO')
 
         return {'FINISHED'}
 
@@ -1302,7 +1347,9 @@ class BlendNetRenderPanel(bpy.types.Panel):
         split = row.split(factor=0.1)
         split.prop(prefs, 'blendnet_show_panel', icon_only=True)
         split.label(text='BlendNet Render (%s)' % (prefs.resource_provider,))
-        row.label(text=context.window_manager.blendnet.status)
+        split = row.split(factor=0.8)
+        split.label(text=context.window_manager.blendnet.status)
+        split.operator('blendnet.getaddonlog', text='', icon='TEXT')
         if not prefs.blendnet_show_panel:
             return
         row = box.row()
@@ -1666,6 +1713,7 @@ def initPreferences():
     BlendNet.addon.getProviderInfo()
 
 def register():
+    BlendNet.addon.initAddonLog()
     BlendNet.providers.loadProviders()
     loadProvidersSettings()
     bpy.utils.register_class(BlendNetAddonPreferences)
@@ -1691,6 +1739,7 @@ def register():
     bpy.utils.register_class(BlendNetAgentCreateOperation)
     bpy.utils.register_class(BlendNetTaskMenu)
     bpy.utils.register_class(BlendNetGetServiceLogOperation)
+    bpy.utils.register_class(BlendNetGetAddonLogOperation)
     bpy.utils.register_class(BlendNetGetNodeLogOperation)
     bpy.utils.register_class(BlendNetRenderPanel)
     bpy.utils.register_class(BlendNetToggleManager)
@@ -1705,6 +1754,7 @@ def unregister():
     bpy.utils.unregister_class(BlendNetDestroyManager)
     bpy.utils.unregister_class(BlendNetRenderPanel)
     bpy.utils.unregister_class(BlendNetGetNodeLogOperation)
+    bpy.utils.unregister_class(BlendNetGetAddonLogOperation)
     bpy.utils.unregister_class(BlendNetGetServiceLogOperation)
     bpy.utils.unregister_class(BlendNetTaskMenu)
     bpy.utils.unregister_class(BlendNetTaskInfoOperation)
