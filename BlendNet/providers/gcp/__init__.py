@@ -742,7 +742,6 @@ def uploadRecursiveToStorage(path, storage_url, dest_path = None, include = None
     if dest_path:
         if platform.system() == 'Windows':
             dest_path = pathlib.PurePath(dest_path).as_posix()
-        storage_url += '/' + dest_path
 
     print('INFO: GCP: Uploading files from %s to "%s" ...' % (path, storage_url))
 
@@ -880,8 +879,8 @@ def getAgentSizeDefault():
 def getStorageUrl(session_id):
     '''Returns the gcp bucket info'''
     configs = _getConfigs()
-    default_name = 'gs://{project}-blendnet-{session_id}'.format(project=configs['project'], session_id=session_id.lower())
-    return 'gs://' + GCP_CONF.get('bucket_name') or default_name
+    default_name = '{project}-blendnet-{session_id}'.format(project=configs['project'], session_id=session_id.lower())
+    return 'gs://' + (GCP_CONF.get('bucket_name') or default_name)
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id
