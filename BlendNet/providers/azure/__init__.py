@@ -81,7 +81,11 @@ def _executeAzTool(*args, data=None):
         print('WARN: Azure: Found UnicodeDecodeError during parsing of the az output, switching to ISO-8859-1:', str(e))
         data = json.loads(result.stdout.decode('iso-8859-1'))
     except json.decoder.JSONDecodeError:
-        pass
+        try:
+            data = {'stdout': result.stdout.decode('utf-8')}
+        except (LookupError, UnicodeDecodeError):
+            # UTF-8 not worked, so probably it's latin1
+            data = {'stdout': result.stdout.decode('iso-8859-1')}
 
     return data
 
@@ -429,6 +433,7 @@ systemctl start blendnet-manager.service
         '--resource-group', AZ_CONF['resource_group'],
         '--image', image,
         '--size', cfg['instance_type'],
+        '--boot-diagnostics-storage', 'https://'+urllib.parse.urlparse(cfg['storage_url']).hostname+'/',
         '--os-disk-size-gb', '200',
         '--generate-ssh-keys', # For ssh access use '--admin-username', 'blendnet-admin', '--ssh-key-values', '@/home/user/.ssh/id_rsa.pub',
         '--assign-identity', 'blendnet-manager',
@@ -586,9 +591,18 @@ def deleteInstance(instance_id):
         print('WARN: Azure: Not enough resources for VM to remove (5 needed): %s' % (toremove_ids,))
 
     # Remove related resources
-    _executeAzTool('resource', 'delete',
-                   '--resource-group', AZ_CONF['resource_group'],
-                   '--ids', *toremove_ids)
+    # Sometimes the resources are failed to delete, so repeat until done
+    for i in range(5):
+        try:
+            _executeAzTool('resource', 'delete',
+                           '--resource-group', AZ_CONF['resource_group'],
+                           '--ids', *toremove_ids)
+        except AzToolException as e:
+            if 'Some resources failed to be deleted' not in str(e):
+                print('ERROR: Unable to delete resources:', e)
+                break
+            print('WARN: Repeat deleting the resource', i, e)
+            time.sleep(1)
 
 def createFirewall(target_group, port):
     '''Create minimal firewall to access Manager / Agent'''
@@ -777,6 +791,14 @@ def getResources(session_id):
             print('WARN: Azure: Unknown type resource instance', inst['name'])
 
     return out
+
+def getNodeLog(instance_id):
+    '''Get the instance serial output log'''
+    data = _executeAzTool('vm', 'boot-diagnostics', 'get-boot-log',
+                          '--resource-group', AZ_CONF['resource_group'],
+                          '--name', instance_id)
+
+    return data.get('stdout')
 
 def getManagerSizeDefault():
     return 'Standard_A1_v2'
