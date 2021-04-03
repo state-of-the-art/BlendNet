@@ -768,7 +768,7 @@ class BlendNetGetNodeLogOperation(bpy.types.Operator):
             else:
                 layout.label(text='Unable to show the log window', icon='ERROR')
 
-        wm.popup_menu(drawPopup, title='Log for manager', icon='INFO')
+        wm.popup_menu(drawPopup, title='Log for'+prefix, icon='INFO')
 
         return {'FINISHED'}
 
@@ -1333,11 +1333,11 @@ class BlendNetRenderPanel(bpy.types.Panel):
         prefs = context.preferences.addons[__package__].preferences
 
         box = layout.box()
-        row = box.row()
+        row = box.split(factor=0.5)
         split = row.split(factor=0.1)
         split.prop(prefs, 'blendnet_show_panel', icon_only=True)
         split.label(text='BlendNet Render (%s)' % (prefs.resource_provider,))
-        split = row.split(factor=0.8)
+        split = row.split(factor=0.9)
         split.label(text=context.window_manager.blendnet.status)
         split.operator('blendnet.getaddonlog', text='', icon='TEXT')
         if not prefs.blendnet_show_panel:
