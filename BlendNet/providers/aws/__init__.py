@@ -256,9 +256,11 @@ def _createRoles():
                         '--role-name', 'blendnet-agent')
         _executeAwsTool('iam', 'wait', 'instance-profile-exists',
                         '--instance-profile-name', 'blendnet-agent')
-    except AwsToolException:
-        # The blendnet-agent role is already exists
-        pass
+    except AwsToolException as e:
+        if '(EntityAlreadyExists)' not in str(e):
+            raise
+        print('INFO: Role blendnet-agent already exists')
+
 
     # Create blendnet-manager role
     try:
@@ -304,9 +306,10 @@ def _createRoles():
         # If it's not wait - we will see the next error during manager allocation
         # Value (blendnet-manager) for parameter iamInstanceProfile.name is invalid. Invalid IAM Instance Profile name
         time.sleep(30)
-    except AwsToolException:
-        # The blendnet-manager role is already exists
-        pass
+    except AwsToolException as e:
+        if '(EntityAlreadyExists)' not in str(e):
+            raise
+        print('INFO: Role blendnet-manager already exists')
 
 def _getImageAmi(name = 'debian-10-amd64-daily-*'):
     '''Gets the latest image per name filter'''
@@ -325,7 +328,7 @@ def _getInstanceId(instance_name):
                            ]),
                            '--query', 'Reservations[].Instances[].InstanceId')
     if len(data) != 1:
-        raise AwsToolException('Error in request of unique instance id with name "%s": %s' % (instance_name, data))
+        return None
 
     return data[0]
 
@@ -334,13 +337,10 @@ def createInstanceManager(cfg):
 
     _createRoles()
 
-    try:
-        inst_id = _getInstanceId(cfg['instance_name'])
-        # If it pass here - means the instance is already existing
+    inst_id = _getInstanceId(cfg['instance_name'])
+    if inst_id:
+        # The instance is already exists
         return inst_id
-    except AwsToolException:
-        # No instance existing - than we can proceed
-        pass
 
     image = _getImageAmi()
     disk_config = [{
@@ -439,13 +439,10 @@ systemctl start blendnet-manager.service
 def createInstanceAgent(cfg):
     '''Creating a new instance for BlendNet Agent'''
 
-    try:
-        inst_id = _getInstanceId(cfg['instance_name'])
-        # If it pass here - means the instance is already existing
+    inst_id = _getInstanceId(cfg['instance_name'])
+    if inst_id:
+        # The instance is already exists
         return inst_id
-    except AwsToolException:
-        # No instance existing - than we can proceed
-        pass
 
     image = _getImageAmi()
     disk_config = [{
@@ -634,14 +631,18 @@ def createFirewall(target_group, port):
         # Waiting for the operation to completed
         _executeAwsTool('ec2', 'wait', 'security-group-exists',
                         '--group-names', target_group)
-    except AwsToolException:
-        # The blendnet-manager security group already exists
-        pass
+    except AwsToolException as e:
+        if '(InvalidGroup.Duplicate)' not in str(e):
+            raise
 
 def createStorage(storage_url):
     '''Creates bucket if it's not exists'''
 
-    _executeAwsTool('s3', 'mb', storage_url)
+    try:
+        _executeAwsTool('s3', 'mb', storage_url)
+    except AwsToolException as e:
+        if '(BucketAlreadyOwnedByYou)' not in str(e):
+            raise
 
     return True
 
@@ -706,8 +707,8 @@ def downloadDataFromStorage(storage_url, path = None):
 
     try:
         _executeAwsTool('s3', 'cp', storage_url, tmp_file.name)
-    except AwsToolException:
-        print('WARN: Downloading failed')
+    except AwsToolException as e:
+        print('WARN: Downloading failed', e)
         return None
 
     # The original tmp_file is unlinked, so reread it
@@ -770,8 +771,8 @@ def getAgentSizeDefault():
 
 def getStorageUrl(session_id):
     '''Returns the aws bucket url'''
-    default_name = 'gs://blendnet-{session_id}'.format(session_id=session_id.lower())
-    return 's3://' + GCP_CONF.get('bucket_name') or default_name
+    default_name = 'blendnet-{session_id}'.format(session_id=session_id.lower())
+    return 's3://' + (AWS_CONF.get('bucket_name') or default_name)
 
 def getManagerName(session_id):
     return 'blendnet-%s-manager' % session_id
