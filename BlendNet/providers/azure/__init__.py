@@ -25,6 +25,8 @@ import site
 import urllib
 import subprocess
 import pathlib
+import time
+import datetime as dt
 
 METADATA_URL = 'http://169.254.169.254/metadata/instance/'
 
@@ -538,6 +540,7 @@ systemctl start blendnet-agent.service
         '--image', image,
         '--size', cfg['instance_type'],
         '--os-disk-size-gb', '200',
+        '--boot-diagnostics-storage', 'https://'+urllib.parse.urlparse(cfg['storage_url']).hostname+'/',
         '--generate-ssh-keys', # For ssh access use '--admin-username', 'blendnet-admin', '--ssh-key-values', '<place_pubkey_here>',
         '--assign-identity', 'blendnet-agent',
         '--nsg', 'blendnet-agent',
@@ -590,7 +593,7 @@ def deleteInstance(instance_id):
     if len(toremove_ids) < 5:
         print('WARN: Azure: Not enough resources for VM to remove (5 needed): %s' % (toremove_ids,))
 
-    # Remove related resources
+    # Clean the related resources
     # Sometimes the resources are failed to delete, so repeat until done
     for i in range(5):
         try:
@@ -600,9 +603,8 @@ def deleteInstance(instance_id):
         except AzToolException as e:
             if 'Some resources failed to be deleted' not in str(e):
                 print('ERROR: Unable to delete resources:', e)
-                break
-            print('WARN: Repeat deleting the resource', i, e)
-            time.sleep(1)
+        print('WARN: Repeat deleting of the resources to be sure', i, toremove_ids)
+        time.sleep(1)
 
 def createFirewall(target_group, port):
     '''Create minimal firewall to access Manager / Agent'''
@@ -778,10 +780,26 @@ def getResources(session_id):
                           '--resource-group', AZ_CONF['resource_group'],
                           '--query', "[?tags.session_id == '%s']" % (session_id,))
 
+    # Azure left the disks sometimes, so need to clean the unattached ones
+    # and btw getting the instance creation date
+    disks = _executeAzTool('disk', 'list',
+                           '--resource-group', AZ_CONF['resource_group'],
+                           '--query', "[?tags.session_id == '%s']" % (session_id,))
+    vm_dates = dict()
+    for disk in disks:
+        vm_dates[disk.get('tags', {}).get('vm')] = disk.get('timeCreated')
+        if disk.get('diskState') != 'Unattached':
+            continue
+        if (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(disk.get('timeCreated'))).seconds < 120:
+            continue
+        print('INFO: Azure: Destroying stale disk:', disk.get('name'))
+        _executeAzTool('disk', 'delete', '--no-wait', '--yes', '--ids', disk.get('id'))
+
     for it in data:
         inst = parseInstanceInfo(it)
         if not inst:
             continue
+        inst['created'] = vm_dates.get(inst['id'], 'unknown')
         it_type = it['tags'].get('type')
         if it_type == 'manager':
             out['manager'] = inst
