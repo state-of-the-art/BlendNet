@@ -90,6 +90,16 @@ scene.cycles.use_progressive_refine = True
 eprint('INFO: Checking existance of the dependencies')
 goods, bads = blend_file.getDependencies(task.get('project_path'), task.get('cwd_path'), True)
 
+def checkRenderExr(path):
+    '''Checks that the EXR file is actually MultiLayer and good for render result'''
+    with open(path, 'rb') as f:
+        h = f.read(32)
+        if not h.startswith(b'\x76\x2f\x31\x01'):
+            return False
+        if not b'MultiChannel' in h:
+            return False
+    return True
+
 class Commands:
     def savePreview(cls = None):
         scene.render.image_settings.file_format = 'OPEN_EXR'
@@ -111,7 +121,24 @@ class Commands:
         # Due to the bug it's not working properly: https://developer.blender.org/T71087
         # Basically when multilayer exr is selected - it's saved as a regular one layer
         # exr, so switched to `write_still` in executing the render command
-        os.rename('_render.exr', 'render.exr')
+        try:
+            if checkRenderExr('_render.exr'):
+                os.rename('_render.exr', 'render.exr')
+        except FileNotFoundError as e:
+            # During cancel of the task `write_still` will not save the render result
+            eprint('ERROR: Unable to find render file:', e)
+
+            # Try to recover with backup-plan
+            scene.render.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
+            scene.render.image_settings.color_mode = 'RGBA'
+            scene.render.image_settings.color_depth = '32'
+            scene.render.image_settings.exr_codec = 'ZIP'
+            bpy.data.images['Render Result'].save_render('_render.exr')
+            if checkRenderExr('_render.exr'):
+                os.rename('_render.exr', 'render.exr')
+                eprint('WARN: Recovered the render file:', os.stat('render.exr').st_size)
+            else:
+                eprint('ERROR: Failed to recover render file (the type is not EXR ML)')
 
 def executeCommand(name):
     func = getattr(Commands, name, None)
