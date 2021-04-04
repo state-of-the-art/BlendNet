@@ -112,6 +112,8 @@ class AgentTask(TaskBase):
         sample_preview_save_time = 0
         # Used to contain the current rendering sample
         curr_sample = 0
+        # The blender crashed, so the path contains trace
+        crash_path = None
         for line in iter(process.stdout.readline, b''):
             l = ''
             try:
@@ -193,7 +195,7 @@ class AgentTask(TaskBase):
                     except Exception as e:
                         print('ERROR: Unable to send "savePreview" command due to exception: %s' % e)
 
-                if operation in ('Finished', 'Cancel | Cancelled'):
+                if operation in ('Finished', 'Cancel | Cancelled', 'Cancelled'):
                     finished = operation == 'Finished'
                     process.stdin.write(b'end\n')
                     process.stdin.flush()
@@ -201,8 +203,13 @@ class AgentTask(TaskBase):
                         self.statusRenderTimeSet(time_sec - prepare_time)
                         self.statusSamplesDoneSet(curr_sample if finished else curr_sample-1)
 
+            # In case the crash happened
+            elif l.startswith('Writing:') and l.endswith('.crash.txt'):
+                print('WARN: Found crash report')
+                crash_path = l.replace('Writing: ', '', 1)
+
             # Collecting the render statistics
-            if l.startswith('Render statistics:'):
+            elif l.startswith('Render statistics:'):
                 statistics = {}
                 header = None
                 for line in iter(process.stdout.readline, b''): # Redefined line intentionally
@@ -237,7 +244,7 @@ class AgentTask(TaskBase):
                 process.send_signal(signal.SIGINT) # Signal will cause Cancel event
                 continue
 
-            # Do something on terminating
+            # Do action on terminating
             if self._parent.isTerminating():
                 print('WARN: Detected terminating in %s' % self._parent.timeToTerminating())
                 self.executionMessagesAdd('WARN: Instance is going to be terminated in %d sec' % self._parent.timeToTerminating())
@@ -275,11 +282,18 @@ class AgentTask(TaskBase):
 
         print('DEBUG: Return code: %s' % process.poll())
 
+        if crash_path:
+            print('WARN: Crash report content:')
+            with open(crash_path, 'r') as f:
+                print(f.read())
+
         if process.poll() == -9: # OOM kill
             self.stateError({self.name(): 'The worker was killed by Out Of Memory - try to use bigger VM for the Agent'})
 
         if finished:
             self.stateComplete()
+        else:
+            self.stateStop()
 
     def _stop(self):
         self._stop_task = True
