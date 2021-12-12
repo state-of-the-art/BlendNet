@@ -675,9 +675,11 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         else:
             samples = scene.cycles.samples
 
-        # Addon need to pass the actual samples number to the manager
-        if scene.cycles.use_square_samples:
-            samples *= samples
+        if hasattr(scene.cycles, 'use_square_samples'):
+            # For blender < 3.0.0
+            # Addon need to pass the actual samples number to the manager
+            if scene.cycles.use_square_samples:
+                samples *= samples
 
         # Where the compose result will be stored on the Addon side
         compose_filepath = scene.render.frame_path()
