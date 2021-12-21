@@ -152,17 +152,17 @@ def _getConfigs():
 def _getCompute():
     creds = _getCreds()
     import googleapiclient.discovery
-    return googleapiclient.discovery.build('compute', 'v1', credentials=creds)
+    return googleapiclient.discovery.build('compute', 'v1', credentials=creds, static_discovery=False)
 
 def _getStorage():
     creds = _getCreds()
     import googleapiclient.discovery
-    return googleapiclient.discovery.build('storage', 'v1', credentials=creds)
+    return googleapiclient.discovery.build('storage', 'v1', credentials=creds, static_discovery=False)
 
 def _getBilling():
     creds = _getCreds()
     import googleapiclient.discovery
-    return googleapiclient.discovery.build('cloudbilling', 'v1', credentials=creds)
+    return googleapiclient.discovery.build('cloudbilling', 'v1', credentials=creds, static_discovery=False)
 
 def _getInstanceTypeInfo(name):
     '''Get info about the instance type'''
