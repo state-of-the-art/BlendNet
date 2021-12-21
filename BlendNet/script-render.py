@@ -66,6 +66,7 @@ if hasattr(scene.cycles, 'progressive'):
         eprint('ERROR: Unable to determine the sampling integrator')
         sys.exit(1)
 else:
+    scene.cycles.use_adaptive_sampling = False
     scene.cycles.samples = task['samples']
 
 # Set task seed or use random one (because we need an unique render pattern)
@@ -163,6 +164,11 @@ def stdinProcess():
             command = line.strip()
             if command == 'end':
                 break
+            # Blender v3 contains a nasty bug with OpenEXR format which don't allow to save
+            # intermediate results of render image: https://developer.blender.org/T94314
+            if command == 'savePreview' and bpy.app.version_file[0] == 3:
+                eprint('WARNING: Saving of intermediate preview for Blender v3 is disabled')
+                continue
             executeCommand(command)
         except Exception as e:
             eprint('ERROR: Exception during processing stdin: %s' % e)
@@ -177,6 +183,7 @@ scene.render.image_settings.color_mode = 'RGBA'
 scene.render.image_settings.color_depth = '32'
 scene.render.image_settings.exr_codec = 'ZIP'
 scene.render.filepath = os.path.abspath('_render.exr')
+
 bpy.ops.render.render(write_still=True)
 
 eprint('INFO: Render process completed')
