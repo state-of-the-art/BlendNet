@@ -15,8 +15,8 @@ Expand-Archive blender-dist.zip
 mv blender-dist\* blender
 
 echo "Download the openssl dist"
-$disturl = 'https://curl.se/windows/dl-7.75.0_4/openssl-1.1.1j_4-win64-mingw.zip'
-$disthash = 'a4a17651456324b79f2a00b0f978edfa1d93a282bbdf197492c394e89a3f9b25'
+$disturl = 'https://curl.se/windows/dl-7.80.0_2/openssl-3.0.1_2-win64-mingw.zip'
+$disthash = 'd19096170fc47ac0284077b9a925b83cd6f4ed0268fbb54cd6de171cd0735c1d'
 $wc.DownloadFile($disturl, "openssl-dist.zip")
 $FileHash = Get-FileHash openssl-dist.zip -Algorithm SHA256
 $FileHash.Hash -eq $disthash
@@ -26,10 +26,10 @@ mv openssl-dist\* openssl
 
 echo "Create the template workspace & prepare certificates"
 mkdir workspace
-openssl\openssl.exe req -x509 -nodes -newkey rsa:4096 `
+openssl\bin\openssl.exe req -x509 -nodes -newkey rsa:4096 `
     -keyout workspace\server.key -out workspace\server.crt `
     -days 365 -subj "/C=US/ST=N/L=N/O=N/OU=N/CN=blendet-service" `
-    -config .\openssl\openssl.cnf
+    -config .\openssl\ssl\openssl.cnf
 # Required ca.crt for Manager
 cp workspace\server.crt workspace\ca.crt
 

@@ -666,14 +666,20 @@ class BlendNetRunTaskOperation(bpy.types.Operator):
         print('INFO: Configuring task "%s"' % self._task_name)
         self.report({'INFO'}, 'Configuring task "%s"' % (self._task_name,))
         samples = None
-        if scene.cycles.progressive == 'PATH':
+        if hasattr(scene.cycles, 'progressive'):
+            # For blender < 3.0.0
+            if scene.cycles.progressive == 'PATH':
+                samples = scene.cycles.samples
+            elif scene.cycles.progressive == 'BRANCHED_PATH':
+                samples = scene.cycles.aa_samples
+        else:
             samples = scene.cycles.samples
-        elif scene.cycles.progressive == 'BRANCHED_PATH':
-            samples = scene.cycles.aa_samples
 
-        # Addon need to pass the actual samples number to the manager
-        if scene.cycles.use_square_samples:
-            samples *= samples
+        if hasattr(scene.cycles, 'use_square_samples'):
+            # For blender < 3.0.0
+            # Addon need to pass the actual samples number to the manager
+            if scene.cycles.use_square_samples:
+                samples *= samples
 
         # Where the compose result will be stored on the Addon side
         compose_filepath = scene.render.frame_path()

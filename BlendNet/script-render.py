@@ -49,18 +49,25 @@ scene.render.threads_mode = 'AUTO'
 
 scene.cycles.device = 'CPU' # The only one supported right now
 
-# Disabling square samples - script is getting the real number of samples to render
-scene.cycles.use_square_samples = False
+if hasattr(scene.cycles, 'use_square_samples'):
+    # For blender < 3.0.0
+    # Disabling square samples - script is getting the real number of samples to render
+    scene.cycles.use_square_samples = False
 
 # Set sampling
 eprint('INFO: Set sampling')
-if scene.cycles.progressive == 'PATH':
-    scene.cycles.samples = task['samples']
-elif scene.cycles.progressive == 'BRANCHED_PATH':
-    scene.cycles.aa_samples = task['samples']
+if hasattr(scene.cycles, 'progressive'):
+    # For blender < 3.0.0
+    if scene.cycles.progressive == 'PATH':
+        scene.cycles.samples = task['samples']
+    elif scene.cycles.progressive == 'BRANCHED_PATH':
+        scene.cycles.aa_samples = task['samples']
+    else:
+        eprint('ERROR: Unable to determine the sampling integrator')
+        sys.exit(1)
 else:
-    eprint('ERROR: Unable to determine the sampling integrator')
-    sys.exit(1)
+    scene.cycles.use_adaptive_sampling = False
+    scene.cycles.samples = task['samples']
 
 # Set task seed or use random one (because we need an unique render pattern)
 scene.cycles.seed = task.get('seed', random.randrange(0, 2147483647))
@@ -77,8 +84,10 @@ if bpy.context.view_layer.cycles.use_denoising:
     # using _cycles.denoise() or composite denoise node
     bpy.context.view_layer.cycles.denoising_store_passes = True
 
-eprint('INFO: Use progressive refine')
-scene.cycles.use_progressive_refine = True
+if hasattr(scene.cycles, 'use_progressive_refine'):
+    # For blender < 3.0.0
+    eprint('INFO: Use progressive refine')
+    scene.cycles.use_progressive_refine = True
 
 # BN-119 Disabled due to crashes during collecting the statistics
 #try:
@@ -155,6 +164,11 @@ def stdinProcess():
             command = line.strip()
             if command == 'end':
                 break
+            # Blender v3 contains a nasty bug with OpenEXR format which don't allow to save
+            # intermediate results of render image: https://developer.blender.org/T94314
+            if command == 'savePreview' and bpy.app.version_file[0] == 3:
+                eprint('WARNING: Saving of intermediate preview for Blender v3 is disabled')
+                continue
             executeCommand(command)
         except Exception as e:
             eprint('ERROR: Exception during processing stdin: %s' % e)
@@ -169,6 +183,7 @@ scene.render.image_settings.color_mode = 'RGBA'
 scene.render.image_settings.color_depth = '32'
 scene.render.image_settings.exr_codec = 'ZIP'
 scene.render.filepath = os.path.abspath('_render.exr')
+
 bpy.ops.render.render(write_still=True)
 
 eprint('INFO: Render process completed')

@@ -57,7 +57,7 @@ done
 
 # Configure the task (render-ci and compose-ci uses 23 samples)
 docker exec blendnet-executor curl --user 'None:None' --insecure --silent -X PUT \
-    -d '{"samples": 23, "project": "test-project.blend", "frame": 32, "project_path": "/srv/workspace/test-project/proj", "cwd_path": "/srv/workspace"}' \
+    -d '{"samples": 23, "compose_filepath": "newout-32.png", "project": "test-project.blend", "frame": 32, "project_path": "/srv/workspace/test-project/proj", "cwd_path": "/srv/workspace"}' \
     "https://blendnet-manager-host:8443/api/v1/task/test-task-1/config"
 
 # Run the task execution
@@ -88,7 +88,7 @@ file "${render_file}" | grep -q 'compression: zip' # Compression is lossless
 if [ "${BLENDER_VERSION}" = '2.80' ]; then
     [ $(stat --format '%s' "${render_file}") -gt $((2*1024*1024)) ] # Render EXR size > 2MB
 else
-    [ $(stat --format '%s' "${render_file}") -gt $((14*1024*1024)) ] # Render EXR size > 14MB
+    [ $(stat --format '%s' "${render_file}") -gt $((5*1024*1024)) ] # Render EXR size > 5MB
 fi
 
 # Watch the task execution and save compose
