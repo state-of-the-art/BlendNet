@@ -33,10 +33,10 @@ docker rm -f blendnet-agent-1 || true
 docker rm -f blendnet-agent-2 || true
 
 # Check existing of the path in the log
-grep 'DATA: CI:' "${results_dir}/addon.log"
+grep --text 'DATA: CI:' "${results_dir}/addon.log"
 
 # Copy the compose file to results
-remote_file="$(grep 'DATA: CI:' "${results_dir}/addon.log" | cut -d' ' -f3-)"
+remote_file="$(grep --text 'DATA: CI:' "${results_dir}/addon.log" | cut -d' ' -f3-)"
 docker cp "blendnet-executor:${remote_file}" "${results_dir}"
 docker rm -f blendnet-executor || true
 
