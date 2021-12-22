@@ -157,12 +157,15 @@ class AgentTask(TaskBase):
                         mem_render_peak = float(d[1].split(':')[1][:-1])
                         rest_status = i+1
                         break
-                if rest_status: # Scene, RenderLayer | Synchronizing object | Ship_Floor
-                                # Scene, RenderLayer | Path Tracing Sample 1/10
+                if rest_status: # Blender v2.80:
+                                #   Scene, RenderLayer | Synchronizing object | Ship_Floor
+                                #   Scene, RenderLayer | Path Tracing Sample 1/10
+                                # Blender v3.0.0:
+                                #   Scene, View Layer | Sample 97/105
                     scene_info = status[rest_status]
                     operation = ' | '.join(status[rest_status+1:])
-                    if 'Path Tracing Sample' in operation:
-                        operation, curr_sample = operation.split(' Sample ')
+                    if 'Sample ' in operation:
+                        operation, curr_sample = operation.split('Sample ')
                         curr_sample = int(curr_sample.split('/')[0])
                         self.statusSamplesDoneSet(curr_sample-1)
                 self.executionDetailsAdd({
@@ -184,7 +187,7 @@ class AgentTask(TaskBase):
                     prepare_time = time_sec
                     self.statusPrepareTimeSet(prepare_time)
 
-                # Update preview every 5 second
+                # Update preview every 5 seconds
                 if curr_sample > 1 and curr_sample < self._cfg.samples and time.time() > sample_preview_save_time:
                     try:
                         sample_preview_save_time = time.time() + 5

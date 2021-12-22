@@ -80,7 +80,7 @@ file "${render_file}" | grep -q 'compression: zip' # Compression is lossless
 if [ "${BLENDER_VERSION}" = '2.80' ]; then
     [ $(stat --format '%s' "${render_file}") -gt $((2*1024*1024)) ] # Render EXR size > 2MB
 else
-    [ $(stat --format '%s' "${render_file}") -gt $((14*1024*1024)) ] # Render EXR size > 14MB
+    [ $(stat --format '%s' "${render_file}") -gt $((5*1024*1024)) ] # Render EXR size > 5MB
 fi
 
 # Watch the task execution and save compose
