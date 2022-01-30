@@ -82,7 +82,11 @@ image_node.image = image
 
 link_name_overrides = {}
 if image_node.image.type == 'MULTILAYER':
-    image_node.layer = 'View Layer'
+    try:
+        image_node.layer = 'View Layer'
+    except:
+        # In Blender v3 the naming was changed
+        image_node.layer = 'ViewLayer'
     link_name_overrides['Image'] = 'Combined'
 
 nodes_to_remove = []
