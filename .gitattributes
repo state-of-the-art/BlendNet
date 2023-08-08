@@ -1,0 +1,3 @@
+.circleci export-ignore
+.github export-ignore
+.git* export-ignore
